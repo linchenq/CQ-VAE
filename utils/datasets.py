@@ -29,4 +29,5 @@ if __name__ == '__main__':
         ax.plot()
         ax.imshow(img, cmap='gray')
         ax.plot(pts[:, 0], pts[:, 1], 'g-')
+        break
         
