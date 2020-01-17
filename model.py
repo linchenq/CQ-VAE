@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchsummary import summary
+import torch.nn.functional as F
 
 from utils.ops import VAEConv, VAEDeconv
 
@@ -35,8 +35,8 @@ class BetaVAE(nn.Module):
     
     def encode(self, x):
         enc = self.encoder(x)
-        enc = enc.view(-1, 256)
-        return self.fc_mu(x), self.fc_var(x)
+        enc = enc.view(-1, 2048)
+        return self.fc_mu(enc), self.fc_var(enc)
     
     def decode(self, x):
         z = self.fc_z(x)
@@ -49,10 +49,18 @@ class BetaVAE(nn.Module):
         z = self.reparametrize(mu, logvar)
         xr = self.decode(z)
         return xr, mu, logvar
+    
+    def loss(self, x, xr, mu, logvar):
+        recon_loss = F.cross_entropy(x, xr, reduction='sum')
+        kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        
+        return (recon_loss + self.beta * kld) / x.shape[0]
+        
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = BetaVAE(in_ch=1, out_ch=1, latent_dims=64, beta=1.)
     model = model.to(device)
     
+    from torchsummary import summary
     summary(model, input_size=(1, 128, 64))
