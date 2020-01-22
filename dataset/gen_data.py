@@ -6,22 +6,23 @@ from sklearn.model_selection import train_test_split
 import utils.cfgs as cfgs
 from utils.preprocess import Preprocess
 
+
 if __name__ == '__main__':
-    # # %% generate image and mesh .npy
-    # csv_f = pd.read_csv(cfgs.PATHS['index'], index_col='ID')
-    # for patient_id, row in csv_f.iterrows():
-    #     dcm_pth = os.path.join(cfgs.PATHS['data'], patient_id, row['Number'])
-    #     vtk_name = f"{patient_id}_SpineMesh2D.json.vtk"
+    # %% generate image and mesh .npy
+    csv_f = pd.read_csv(cfgs.PATHS['index'], index_col='ID')
+    for patient_id, row in csv_f.iterrows():
+        dcm_pth = os.path.join(cfgs.PATHS['data'], patient_id, row['Number'])
+        vtk_name = f"{patient_id}_SpineMesh2D.json.vtk"
         
-    #     for mesh_r, ext in zip(cfgs.PATHS['mesh'], cfgs.PATHS['ext']):
-    #         vtk_pth = os.path.join(mesh_r, vtk_name)
-    #         if not (os.path.isfile(dcm_pth) and os.path.isfile(vtk_pth)):
-    #             print(f"patient data lost: {patient_id}")
-    #             break
+        for mesh_r, ext in zip(cfgs.PATHS['mesh'], cfgs.PATHS['ext']):
+            vtk_pth = os.path.join(mesh_r, vtk_name)
+            if not (os.path.isfile(dcm_pth) and os.path.isfile(vtk_pth)):
+                print(f"patient data lost: {patient_id}")
+                break
             
-    #         pre = Preprocess(dcm_path=dcm_pth, vtk_path=vtk_pth)
-    #         pre.save(f"{patient_id}@{ext}", cfgs.PATHS['pair'])
-    # # end
+            pre = Preprocess(dcm_path=dcm_pth, vtk_path=vtk_pth)
+            pre.save(f"{patient_id}@{ext}", cfgs.PATHS['pair'])
+    # end
             
     # %% split the whole dataset to txt
     train, valid, _, _ = train_test_split(cfgs.TRAIN, range(len(cfgs.TRAIN)), test_size=0.1, random_state=17)
@@ -35,5 +36,5 @@ if __name__ == '__main__':
             for filename in os.listdir(cfgs.PATHS['r_img']):
                 if filename.split('@')[0] in para:
                     out = str(os.path.join(cfgs.PATHS['r_img'], filename))
-                    print(out, file=fs)                
+                    print(out, file=fs)
     # end

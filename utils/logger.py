@@ -8,9 +8,9 @@ class Logger(object):
         self.writer = tf.summary.FileWriter(log_dir)
 
         """Create a file writter logging to .log"""
-        self.logger = logging.getLogger("UNET")
+        self.logger = logging.getLogger("VAE")
         self.logger.setLevel(logging.DEBUG)
-        fh = logging.FileHandler('./logs/model.log')
+        fh = logging.FileHandler(f'{log_dir}model.log')
         fh.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)
@@ -27,12 +27,12 @@ class Logger(object):
         summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value) for tag, value in tag_value_pairs])
         self.writer.add_summary(summary, step)
 
-    def log_summary(self, mode, msg):
-        if mode == "INFO":
+    def log(self, mode, msg):
+        if mode == "INF":
             self.logger.info(msg)
-        elif mode == "WARNING":
+        elif mode == "WAR":
             self.logger.warning(msg)
-        elif mode == "DEBUG":
+        elif mode == "BUG":
             self.logger.debug(msg)
         else:
             raise NotImplementedError
