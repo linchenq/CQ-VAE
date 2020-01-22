@@ -1,0 +1,18 @@
+# generating folders
+## log folder, saved tensorboard and text log
+logs
+saves
+outputs
+
+# pycache
+__pycache__
+
+# spyder project initial
+.spyproject
+
+# custom dataset
+dataset/UM*
+dataset/*.txt
+
+# private
+dataset/utils/cfgs.py

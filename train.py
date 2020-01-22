@@ -74,9 +74,9 @@ if __name__ == '__main__':
         
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=2)
-    parser.add_argument("--lr", type=float, default=1e-1)
+    parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--epoch", type=int, default=100)
-    parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument("--device", type=str, default="cuda:1")
     
     parser.add_argument("--eval_step", type=int, default=5)
     parser.add_argument("--save_step", type=int, default=20)
