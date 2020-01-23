@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-import utils.cfgs as cfgs
-from utils.preprocess import Preprocess
+import util.cfgs as cfgs
+from util.preprocess import Preprocess
 
 
 if __name__ == '__main__':

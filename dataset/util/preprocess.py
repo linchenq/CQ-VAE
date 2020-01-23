@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pydicom
 import vtk
-from utils.MinimumBoundingBox import MinimumBoundingBox
+from util.MinimumBoundingBox import MinimumBoundingBox
 from skimage.transform import warp
 
 import matplotlib.pyplot as plt

@@ -14,10 +14,10 @@ class VAEConv(nn.Module):
         return self.block(x)
     
 class VAEDeconv(nn.Module):
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, ks=2, s=2, p=0):
         super(VAEDeconv, self).__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose2d(in_ch, out_ch, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(in_ch, out_ch, kernel_size=ks, stride=s, padding=p),
             nn.BatchNorm2d(out_ch),
             nn.ReLU()
         )
