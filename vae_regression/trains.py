@@ -6,7 +6,10 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from reg_model import BetaVAE
+import sys
+sys.path.append("..") 
+
+from models import BetaVAE
 from utils.datasets import SpineDataset
 from utils.logger import Logger
     
@@ -42,6 +45,23 @@ class Trainer(object):
         for epoch in tqdm.tqdm(range(num_epoch)):
             self.run_single_step(epoch)
     
+    def evaluate(self, epoch):
+        print("evaluating...")
+        valid_loss = 0
+        for batch_i, (x, mesh) in enumerate(self.dataloader['valid']):
+            x, mesh = x.float(), mesh.float()
+            x, mesh = x.to(self.device), mesh.to(self.device)
+            
+            with torch.no_grad():
+                pts, mu, logvar = self.model(x)
+                loss = self.model.loss(pts, mesh, mu, logvar)
+            
+            valid_loss += loss.item()
+        valid_loss /= len(self.dataloader['valid'])
+        print(f"{epoch}: valid loss is {valid_loss}")
+        self.logger.scalar_summary("valid/loss", valid_loss, epoch)
+            
+    
     def run_single_step(self, epoch):
         self.model.train()
         train_loss = 0
@@ -60,11 +80,11 @@ class Trainer(object):
             train_loss += loss.item()
         
         train_loss /= len(self.dataloader['train'])
-        print(train_loss)
+        print(f"{epoch}: train loss is {train_loss}")
         self.logger.scalar_summary("train/loss", train_loss, epoch)
         
         if epoch % self.args.eval_step == 0:
-            pass
+            self.evaluate(epoch)
         
         if epoch % self.args.save_step == 0:
             torch.save(self.model.state_dict(), f"{self.args.sav_pth}ckpt_{epoch}.pth")
@@ -75,7 +95,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=150)
+    parser.add_argument("--epoch", type=int, default=501)
     parser.add_argument("--device", type=str, default="cuda:1")
     
     parser.add_argument("--eval_step", type=int, default=5)

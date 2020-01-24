@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import sys
+sys.path.append("..") 
+
 from utils.ops import ResEncoder, VAEDeconv
 
 class BetaVAE(nn.Module):

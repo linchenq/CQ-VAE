@@ -2,30 +2,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils.ops import VAEConv, VAEDeconv
+import sys
+sys.path.append("..") 
 
-class BetaVAECon(nn.Module):
-    def __init__(self, in_ch=1, out_ch=1, latent_dims=256, beta=1.):
-        super(BetaVAECon, self).__init__()
+from utils.ops import ResEncoder, VAEDeconv
+
+class BetaVAE(nn.Module):
+    def __init__(self, in_ch=1, out_ch=176*2, latent_dims=64, beta=1.):
+        super(BetaVAE, self).__init__()
         self.latent_dims = latent_dims
         self.beta = beta
         
-        self.encoder = nn.Sequential(
-            VAEConv(1, 32),
-            VAEConv(32, 32),
-            VAEConv(32, 64),
-            VAEConv(64, 64)
-        )
+        self.encoder = ResEncoder(in_ch=in_ch)
         self.decoder = nn.Sequential(
-            VAEDeconv(64, 64, 4, 2, 1),
-            VAEDeconv(64, 32, 4, 2, 1),
-            VAEDeconv(32, 32, 4, 2, 1),
-            VAEDeconv(32, 1, 4, 2, 1)
+            VAEDeconv(512, 256, 2, 2, 0),
+            VAEDeconv(256, 128, 2, 2, 0)
         )
-
-        self.fc_mu = nn.Linear(2048, self.latent_dims)
-        self.fc_var = nn.Linear(2048, self.latent_dims)
-        self.fc_z = nn.Linear(self.latent_dims, 2048)
+        self.dec_dense = nn.Linear(128*8*16, 4096)
+        self.regression = nn.Linear(4096, out_ch)
+        
+        self.fc_mu = nn.Linear(4096, self.latent_dims)
+        self.fc_var = nn.Linear(4096, self.latent_dims)
+        self.fc_z = nn.Linear(self.latent_dims, 4096)
         
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
@@ -37,14 +35,20 @@ class BetaVAECon(nn.Module):
     
     def encode(self, x):
         enc = self.encoder(x)
-        enc = enc.view(-1, 2048)
+        enc = enc.view(-1, 4096)
         return self.fc_mu(enc), self.fc_var(enc)
     
     def decode(self, x):
         z = self.relu(self.fc_z(x))
-        z = z.view(-1, 64, 4, 8)
+        z = z.view(-1, 512, 2, 4)
         z = self.decoder(z)
-        return self.sigmoid(z)
+        
+        z = z.view(-1, 128*8*16)
+        z = self.relu(self.dec_dense(z))
+        z = self.regression(z)
+        
+        z = z.view(-1, 176, 2)
+        return z
     
     def forward(self, x):
         mu, logvar = self.encode(x)
@@ -53,9 +57,9 @@ class BetaVAECon(nn.Module):
             
         return pts, mu, logvar
     
-    def loss(self, xr, x, mu, logvar):
-        recon_loss = F.binary_cross_entropy(xr, x, reduction='sum')
-        # recon_loss = F.mse_loss(xr, x, reduction='sum')
+    def loss(self, pts, gt, mu, logvar):
+        # recon_loss = F.binary_cross_entropy(xr, x, reduction='sum')
+        recon_loss = F.mse_loss(pts, gt, reduction='sum')
         
         kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         
@@ -64,9 +68,9 @@ class BetaVAECon(nn.Module):
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = BetaVAECon(in_ch=1, out_ch=1, latent_dims=64, beta=1.)
+    model = BetaVAE(in_ch=1, out_ch=176*2, latent_dims=64, beta=1.)
     model = model.to(device)
-    if False:
+    if True:
         from torchsummary import summary
         summary(model, input_size=(1, 64, 128))
     
