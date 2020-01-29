@@ -6,7 +6,10 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from model import BetaVAE
+import sys
+sys.path.append("..") 
+
+from models import BetaVAECon
 from utils.datasets import SpineDataset
 from utils.logger import Logger
     
@@ -22,7 +25,7 @@ class Trainer(object):
         # prerequistites and log initial
         os.makedirs(self.args.log_pth, exist_ok=True)
         os.makedirs(self.args.sav_pth, exist_ok=True)
-        self.logger = Logger(self.args.log_pth, self.args.task_name)
+        self.logger = Logger(self.args.log_pth)
         if self.args.pretrained_weights is not None:
             if self.args.pretrained_weights.endswith(".pth"):
                 self.model.load_state_dict(torch.load(self.args.pretrained_weights))
@@ -50,15 +53,14 @@ class Trainer(object):
             x, mesh = x.to(self.device), mesh.to(self.device)
             
             with torch.no_grad():
-                pts, mu, logvar = self.model(x)
-                loss = self.model.loss(pts, mesh, mu, logvar)
+                xr, mu, logvar = self.model(x)
+                loss = self.model.loss(xr, x, mu, logvar)
             
             valid_loss += loss.item()
+            
         valid_loss /= len(self.dataloader['valid'])
         print(f"{epoch}: valid loss is {valid_loss}")
-        self.logger.log("INF", f"{epoch}: valid loss is {valid_loss}")
         self.logger.scalar_summary("valid/loss", valid_loss, epoch)
-            
     
     def run_single_step(self, epoch):
         self.model.train()
@@ -70,8 +72,8 @@ class Trainer(object):
             self.optimizer.zero_grad()
             
             with torch.autograd.detect_anomaly():
-                pts, mu, logvar = self.model(x)
-                loss = self.model.loss(pts, mesh, mu, logvar)
+                xr, mu, logvar = self.model(x)
+                loss = self.model.loss(xr, x, mu, logvar)
                 loss.backward()
                 self.optimizer.step()
             
@@ -79,14 +81,13 @@ class Trainer(object):
         
         train_loss /= len(self.dataloader['train'])
         print(f"{epoch}: train loss is {train_loss}")
-        self.logger.log("INF", f"{epoch}: train loss is {train_loss}")
         self.logger.scalar_summary("train/loss", train_loss, epoch)
         
         if epoch % self.args.eval_step == 0:
             self.evaluate(epoch)
         
         if epoch % self.args.save_step == 0:
-            torch.save(self.model.state_dict(), f"{self.args.sav_pth}ckpt_{self.args.task_name}_{epoch}.pth")
+            torch.save(self.model.state_dict(), f"{self.args.sav_pth}ckpt_{epoch}.pth")
 
 
 if __name__ == '__main__':
@@ -94,12 +95,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=11)
-    parser.add_argument("--device", type=str, default="cuda:1")
-    parser.add_argument("--task_name", type=str, default="test")
+    parser.add_argument("--epoch", type=int, default=501)
+    parser.add_argument("--device", type=str, default="cuda:0")
     
     parser.add_argument("--eval_step", type=int, default=5)
-    parser.add_argument("--save_step", type=int, default=5)
+    parser.add_argument("--save_step", type=int, default=20)
     
     parser.add_argument("--log_pth", type=str, default="./logs/")
     parser.add_argument("--sav_pth", type=str, default="./saves/")
@@ -109,8 +109,8 @@ if __name__ == '__main__':
     
     dataset = {}
     for param in ['train', 'valid']:
-        dataset[param] = SpineDataset(f"dataset/{param}.txt")
-    model = BetaVAE(in_ch=1, out_ch=176*2, latent_dims=64, beta=1.)
+        dataset[param] = SpineDataset(f"../dataset/{param}.txt")
+    model = BetaVAECon(in_ch=1, out_ch=1, latent_dims=64, beta=1.)
     
     trainer = Trainer(args, dataset, model)
     trainer.train()

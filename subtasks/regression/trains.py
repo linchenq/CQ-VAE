@@ -6,7 +6,10 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from model import BetaVAE
+import sys
+sys.path.append("../..") 
+
+from models import BetaVAE
 from utils.datasets import SpineDataset
 from utils.logger import Logger
     
@@ -94,12 +97,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=11)
+    parser.add_argument("--epoch", type=int, default=100)
     parser.add_argument("--device", type=str, default="cuda:1")
-    parser.add_argument("--task_name", type=str, default="test")
+    parser.add_argument("--task_name", type=str, default="")
     
     parser.add_argument("--eval_step", type=int, default=5)
-    parser.add_argument("--save_step", type=int, default=5)
+    parser.add_argument("--save_step", type=int, default=20)
     
     parser.add_argument("--log_pth", type=str, default="./logs/")
     parser.add_argument("--sav_pth", type=str, default="./saves/")
@@ -109,7 +112,7 @@ if __name__ == '__main__':
     
     dataset = {}
     for param in ['train', 'valid']:
-        dataset[param] = SpineDataset(f"dataset/{param}.txt")
+        dataset[param] = SpineDataset(f"../dataset/{param}.txt")
     model = BetaVAE(in_ch=1, out_ch=176*2, latent_dims=64, beta=1.)
     
     trainer = Trainer(args, dataset, model)

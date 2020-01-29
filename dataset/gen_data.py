@@ -37,4 +37,4 @@ if __name__ == '__main__':
                 if filename.split('@')[0] in para:
                     out = str(os.path.join(cfgs.PATHS['r_img'], filename))
                     print(out, file=fs)
-    # end
+    # end 

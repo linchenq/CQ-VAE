@@ -3,14 +3,14 @@ import logging
 
 
 class Logger(object):
-    def __init__(self, log_dir):
+    def __init__(self, log_dir, task_name):
         """Create a summary writer logging to log_dir."""
         self.writer = tf.summary.FileWriter(log_dir)
 
         """Create a file writter logging to .log"""
         self.logger = logging.getLogger("VAE")
         self.logger.setLevel(logging.DEBUG)
-        fh = logging.FileHandler(f'{log_dir}model.log')
+        fh = logging.FileHandler(f'{log_dir}model_{task_name}.log')
         fh.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)

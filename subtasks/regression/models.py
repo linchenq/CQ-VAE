@@ -2,21 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import sys
+sys.path.append("..") 
+
 from utils.ops import ResEncoder, VAEDeconv
 
-class DiscreteVAE(nn.Module):
+class BetaVAE(nn.Module):
     def __init__(self, in_ch=1, out_ch=176*2, latent_dims=64, beta=1.):
-        super(DiscreteVAE, self).__init__()
+        super(BetaVAE, self).__init__()
         self.latent_dims = latent_dims
         self.beta = beta
         
         self.encoder = ResEncoder(in_ch=in_ch)
-        
-        
-        
         self.decoder = nn.Sequential(
-            VAEDeconv(512, 256),
-            VAEDeconv(256, 128)
+            VAEDeconv(512, 256, 2, 2, 0),
+            VAEDeconv(256, 128, 2, 2, 0)
         )
         self.dec_dense = nn.Linear(128*8*16, 4096)
         self.regression = nn.Linear(4096, out_ch)
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = BetaVAE(in_ch=1, out_ch=176*2, latent_dims=64, beta=1.)
     model = model.to(device)
-    if False:
+    if True:
         from torchsummary import summary
         summary(model, input_size=(1, 64, 128))
     

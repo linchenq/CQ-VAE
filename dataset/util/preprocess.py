@@ -146,6 +146,7 @@ class Preprocess():
             ax.plot()
             ax.imshow(Inew, cmap='gray')
             ax.plot(x, y, 'g-')
+            break
     
     def save(self, filename, path):
         for disk_idx in range(1, len(self.mesh_element), 2):
