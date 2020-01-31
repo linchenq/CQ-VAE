@@ -26,7 +26,7 @@ class VAEDeconv(nn.Module):
         return self.block(x)
     
 class ResEncoder(nn.Module):
-    def __init__(self, in_ch):
+    def __init__(self, in_ch):  
         super(ResEncoder, self).__init__()
         self.resnet = models.resnet34(pretrained=False)
         self.enc0 = nn.Sequential(
@@ -49,3 +49,16 @@ class ResEncoder(nn.Module):
         out = self.enc4(out)
         
         return out
+    
+class ResDecoder(nn.Module):
+    def __init__(self, layers):
+        super(ResDecoder, self).__init__()
+        self.n_layers = len(layers) - 1
+        self.planes = []
+        
+        for index in range(self.n_layers):
+            self.planes.append(VAEDeconv(layers[index], layers[index + 1]))
+        self.blocks = nn.Sequential(*self.planes)
+
+    def forward(self, x):
+        return self.blocks(x)           

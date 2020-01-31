@@ -6,7 +6,8 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from model import BetaVAE
+import utils.utils as uts
+from model import DiscreteVAE
 from utils.datasets import SpineDataset
 from utils.logger import Logger
     
@@ -36,6 +37,10 @@ class Trainer(object):
         self.optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()),
                                     lr=self.args.lr)
         
+        # loss recorder
+        self.train_dict = {}
+        self.valid_dict = {}
+        
     def train(self):
         num_epoch = self.args.epoch
         
@@ -50,15 +55,24 @@ class Trainer(object):
             x, mesh = x.to(self.device), mesh.to(self.device)
             
             with torch.no_grad():
-                pts, mu, logvar = self.model(x)
-                loss = self.model.loss(pts, mesh, mu, logvar)
+                pts, qr = self.model(x)
+                loss = self.model.loss(pts, mesh, qr)
             
             valid_loss += loss.item()
         valid_loss /= len(self.dataloader['valid'])
+        self.valid_dict[epoch] = valid_loss
+        
         print(f"{epoch}: valid loss is {valid_loss}")
         self.logger.log("INF", f"{epoch}: valid loss is {valid_loss}")
         self.logger.scalar_summary("valid/loss", valid_loss, epoch)
-            
+        
+    def eval_record(self, epoch):
+        metrics = uts.print_metrics(self.train_dict, self.valid_dict)
+        print(f"util {epoch}:\n{metrics}")
+        self.logger.log("INF", f"util {epoch}:\n{metrics}")
+        
+        uts.plot_loss(epoch, self.train_dict, self.valid_dict)
+        
     
     def run_single_step(self, epoch):
         self.model.train()
@@ -70,20 +84,23 @@ class Trainer(object):
             self.optimizer.zero_grad()
             
             with torch.autograd.detect_anomaly():
-                pts, mu, logvar = self.model(x)
-                loss = self.model.loss(pts, mesh, mu, logvar)
+                pts, qy = self.model(x)
+                loss = self.model.loss(pts, mesh, qy)
                 loss.backward()
                 self.optimizer.step()
             
             train_loss += loss.item()
         
         train_loss /= len(self.dataloader['train'])
+        self.train_dict[epoch] = train_loss
+        
         print(f"{epoch}: train loss is {train_loss}")
         self.logger.log("INF", f"{epoch}: train loss is {train_loss}")
         self.logger.scalar_summary("train/loss", train_loss, epoch)
         
         if epoch % self.args.eval_step == 0:
             self.evaluate(epoch)
+            self.eval_record(epoch)
         
         if epoch % self.args.save_step == 0:
             torch.save(self.model.state_dict(), f"{self.args.sav_pth}ckpt_{self.args.task_name}_{epoch}.pth")
@@ -110,7 +127,10 @@ if __name__ == '__main__':
     dataset = {}
     for param in ['train', 'valid']:
         dataset[param] = SpineDataset(f"dataset/{param}.txt")
-    model = BetaVAE(in_ch=1, out_ch=176*2, latent_dims=64, beta=1.)
+    model = DiscreteVAE(in_ch=1, out_ch=176*2, 
+                        latent_dims=64, vec_dims=11, 
+                        beta=1., temperature=1., 
+                        device=args.device)
     
     trainer = Trainer(args, dataset, model)
     trainer.train()
