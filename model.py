@@ -5,36 +5,46 @@ import torch.nn.functional as F
 from utils.ops import ResEncoder, ResDecoder
 
 class DiscreteVAE(nn.Module):
-    
-    def __init__(self, in_ch=1,
-                       out_ch=176*2,
+    ''' Encoder Structure: ResEncoder -> flatten -> discrete distribution -> logits
+                                                                              | softmax
+                                                                             qy
+        
+        # ResEncoder: (batch_size, 1, 64, 128) -> (batch_size, 512, 2, 4)
+        # Discrete: (batch_size, 512 * 2 * 4) -> (batch_size, lat_dims * vec_dims)
+        
+    '''
+        
+    ''' Sample and decoder Structure: logits -(gumbel softmax sampling)-> decoder 
+                            | softmax
+                           qy -> kl-divergence between U(0,1) and softmaxed-logits
+                           |
+                          log_qy
+        # logits: (batch_size, lat_dims * vec_dims)
+    '''
+    def __init__(self, in_channels=1,
+                       out_channels=176*2,
+                       
                        latent_dims=64,
-                       vec_dims=11,
+                       vector_dims=11,
+                       
                        beta=1.,
-                       temperature=1.,
+                       tau=1.,
                        device=None
                 ):
         
         super(DiscreteVAE, self).__init__()
         
         self.latent_dims = latent_dims
-        self.vec_dims = vec_dims
+        self.vector_dims = vector_dims
         
-        self.temperature = temperature
+        self.tau = tau
         self.beta = beta
         self.device = device
         
-        # encoder
-        self.encoder = ResEncoder(in_ch=in_ch)
-        self.fc_enc = nn.Linear(512*2*4, latent_dims*vec_dims)
+        self.encoder = ResEncoder(in_ch=in_channels)
+        self.discrete = nn.Linear(4096, latent_dims * vector_dims)
         
-        # decoder
-        self.fc_dec = nn.Linear(latent_dims*vec_dims, 512*2*4)
-        self.decoder = ResDecoder(layers=[512, 256, 128])
-        
-        self.fc_dense1 = nn.Linear(128*8*16, 4096)
-        self.fc_dense2 = nn.Linear(4096, 1024)
-        self.fc_reg = nn.Linear(1024, out_ch)
+        self.decoder = MLPDecoder(in_ch=latent_dims * vector_dims, out_ch=out_channels)
         
         self.softmax = nn.Softmax(dim=-1)
         self.relu = nn.ReLU()
@@ -51,32 +61,24 @@ class DiscreteVAE(nn.Module):
         sample = sample.to(self.device)
         pi = logits + sample
         
-        out = self.softmax(pi / self.temperature)
-        out = out.view(-1, self.latent_dims*self.vec_dims)
+        out = self.softmax(pi / self.tau)
         return out
     
     def encode(self, x):
         enc = self.encoder(x)
-        enc = enc.view(-1, 512*2*4)
-        enc = self.fc_enc(enc)
+        enc = x.view(-1, 4096)
+        enc = self.discrete(enc)
         
-        logits = enc.view(-1, self.latent_dims, self.vec_dims)
+        logits = enc.view(-1, self.latent_dims, self.vector_dims)
         qy = self.softmax(logits)
         
         return logits, qy
 
     def decode(self, x):
-        dec = self.relu(self.fc_dec(x))
-        dec = dec.view(-1, 512, 2, 4)
-        
-        dec = self.decoder(dec)
-        
-        dec = dec.view(-1, 128*8*16)
-        dec = self.relu(self.fc_dense1(dec))
-        dec = self.relu(self.fc_dense2(dec))
-        dec = self.fc_reg(dec)
-        
+        x = x.view(-1, self.latent_dims * self.vector_dims)
+        dec = self.decoder(x)
         dec = dec.view(-1, 176, 2)
+        
         return dec
     
     def forward(self, x):
@@ -97,14 +99,17 @@ class DiscreteVAE(nn.Module):
         
 
 if __name__ == '__main__':
+    debug = True
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
     model = DiscreteVAE(in_ch=1, out_ch=176*2, latent_dims=64, vec_dims=11, temperature=1., beta=1., device=device)
     model = model.to(device)
-    if True:
+    
+    if debug:
         from torchsummary import summary
         summary(model, input_size=(1, 64, 128))
     
-    if True:
+    if debug:
         from torch.autograd import Variable
         img = Variable(torch.rand(2, 1, 64, 128))
         img = img.to(device)
