@@ -14,5 +14,5 @@ __pycache__
 dataset/UM*
 dataset/*.txt
 
-# private
-dataset/utils/cfgs.py
+# ignored old versions
+old
