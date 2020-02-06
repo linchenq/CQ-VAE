@@ -46,6 +46,12 @@ class Trainer(object):
         
         for epoch in tqdm.tqdm(range(num_epoch)):
             self.run_single_step(epoch)
+            
+        # final log record for plot
+        self.logger.log("INF", self.train_dict.keys())
+        self.logger.log("INF", self.train_dict.values())
+        self.logger.log("INF", self.valid_dict.keys())
+        self.logger.log("INF", self.train_dict.values())
     
     def evaluate(self, epoch):
         print("evaluating...")
@@ -111,12 +117,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=11)
-    parser.add_argument("--device", type=str, default="cuda:1")
+    parser.add_argument("--epoch", type=int, default=5)
+    parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--task_name", type=str, default="test")
     
-    parser.add_argument("--eval_step", type=int, default=5)
-    parser.add_argument("--save_step", type=int, default=5)
+    parser.add_argument("--eval_step", type=int, default=2)
+    parser.add_argument("--save_step", type=int, default=2)
     
     parser.add_argument("--log_pth", type=str, default="./logs/")
     parser.add_argument("--sav_pth", type=str, default="./saves/")
@@ -127,9 +133,9 @@ if __name__ == '__main__':
     dataset = {}
     for param in ['train', 'valid']:
         dataset[param] = SpineDataset(f"dataset/{param}.txt")
-    model = DiscreteVAE(in_ch=1, out_ch=176*2, 
-                        latent_dims=64, vec_dims=11, 
-                        beta=1., temperature=1., 
+    model = DiscreteVAE(in_channels=1, out_channels=180*2, 
+                        latent_dims=64, vector_dims=11, 
+                        beta=1., tau=1., 
                         device=args.device)
     
     trainer = Trainer(args, dataset, model)
