@@ -10,12 +10,13 @@ class Logger(object):
         """Create a file writter logging to .log"""
         self.logger = logging.getLogger("VAE")
         self.logger.setLevel(logging.DEBUG)
-        fh = logging.FileHandler(f'{log_dir}model_{task_name}.log')
-        fh.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        fh.setFormatter(formatter)
-        self.logger.addHandler(fh)
-        self.logger.propagate = False
+        if not self.logger.handlers:
+            fh = logging.FileHandler(f'{log_dir}model_{task_name}.log')
+            fh.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            fh.setFormatter(formatter)
+            self.logger.addHandler(fh)
+            self.logger.propagate = False
 
     def scalar_summary(self, tag, value, step):
         """Log a scalar variable."""
