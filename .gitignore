@@ -16,7 +16,6 @@ dataset/mesh
 
 # privacy
 dataset/utils4data/cfgs.py
-dataset/*.txt
 
 # ignored old versions
 old
