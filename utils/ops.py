@@ -29,7 +29,7 @@ class DiscreteEncoder(nn.Module):
 class DiscreteDecoder(nn.Module):
     def __init__(self, in_ch, out_ch):
         super(DiscreteDecoder, self).__init__()
-        self.recon = nn.Linear(in_ch, 4096)
+        self.recon = nn.Linear(in_ch, 8192)
         
         self.planes = []
         for ch in [256, 128]:
@@ -37,18 +37,18 @@ class DiscreteDecoder(nn.Module):
         self.ups = nn.Sequential(*self.planes)
         
         self.fcs = nn.Sequential(
-            nn.Linear(16384, 4096),
+            nn.Linear(32768, 8192),
             nn.ReLU(inplace=True),
-            nn.Linear(4096, 1024),
+            nn.Linear(8192, 1024),
             nn.ReLU(inplace=True),
             nn.Linear(1024, out_ch)
         )
         
     def forward(self, x):
         rec = self.recon(x)
-        rec = rec.view(-1, 512, 2, 4)
+        rec = rec.view(-1, 512, 4, 4)
         up = self.ups(rec)
-        up = up.view(-1, 16384)
+        up = up.view(-1, 32768)
         out = self.fcs(up)
         
         return out

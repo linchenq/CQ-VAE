@@ -1,5 +1,6 @@
-import os
 import numpy as np
+from PIL import Image
+from scipy.io import loadmat
 
 import torch
 from torch.utils.data import Dataset
@@ -14,28 +15,30 @@ class SpineDataset:
     
     def __getitem__(self, index):
         img_pth = self.img_files[index % len(self.img_files)].rstrip()
-        pts_pth = img_pth.replace("image", "point")
+        pts_pth = img_pth.replace("image", "mesh").replace(".jpg", ".mat")
         
-        img, pts = np.load(img_pth), np.load(pts_pth)
-        # pts = np.expand_dims(pts, axis=0)
+        img = np.array(Image.open(img_pth).convert('L'))
         
-        # fit the channel requiremend
+        # fit the channel requirement only if grayscale (H, W)
         img = np.expand_dims(img, axis=0)
-        
-        # normalize each data by min/max value
         img = (img - np.min(img)) / (np.max(img) - np.min(img))
         
+        mat = loadmat(pts_pth)
+        pts = np.vstack((mat['disk_landmarks'],
+                         mat['disk_right'], mat['disk_up'],
+                         mat['disk_left'], mat['disk_bot']))
+
         return img, pts
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    ds = SpineDataset(r"../dataset/test.txt")
+    ds = SpineDataset(r"../dataset/train.txt")
     
-    # 0， 29, 88， 117
     for i, (img, pts) in enumerate(ds):
         fig, ax = plt.subplots()
         ax.plot()
         ax.imshow(img[0], cmap='gray')
-        ax.plot(pts[0, :, 0], pts[0, :, 1], 'g-')
+        ax.plot(pts[4:, 0], pts[4:, 1], 'g-')
+        ax.scatter(pts[0:4, 0], pts[0:4, 1], marker = 'o', color = 'b')
         break
         
