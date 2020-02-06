@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils.ops import ResEncoder, ResDecoder
+from utils.ops import DiscreteEncoder, DiscreteDecoder
 
 class DiscreteVAE(nn.Module):
     ''' Encoder Structure: ResEncoder -> flatten -> discrete distribution -> logits
@@ -41,10 +41,10 @@ class DiscreteVAE(nn.Module):
         self.beta = beta
         self.device = device
         
-        self.encoder = ResEncoder(in_ch=in_channels)
+        self.encoder = DiscreteEncoder(in_ch=in_channels)
         self.discrete = nn.Linear(4096, latent_dims * vector_dims)
         
-        self.decoder = MLPDecoder(in_ch=latent_dims * vector_dims, out_ch=out_channels)
+        self.decoder = DiscreteDecoder(in_ch=latent_dims * vector_dims, out_ch=out_channels)
         
         self.softmax = nn.Softmax(dim=-1)
         self.relu = nn.ReLU()
@@ -92,7 +92,7 @@ class DiscreteVAE(nn.Module):
         recon_loss = F.mse_loss(pts, gt, reduction='sum') / pts.shape[0]
         
         log_qy = torch.log(qy + eps)
-        g = torch.log(torch.Tensor([1.0/self.vec_dims])).to(self.device)
+        g = torch.log(torch.Tensor([1.0/self.vector_dims])).to(self.device)
         kld = torch.sum(qy * (log_qy - g), dim=-1).mean()
         
         return (recon_loss + self.beta * kld) * pts.shape[0]
@@ -102,7 +102,15 @@ if __name__ == '__main__':
     debug = True
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    model = DiscreteVAE(in_ch=1, out_ch=176*2, latent_dims=64, vec_dims=11, temperature=1., beta=1., device=device)
+    model = DiscreteVAE(in_channels=1,
+                        out_channels=176*2,
+                        
+                        latent_dims=64,
+                        vector_dims=11,
+                        
+                        beta=1.,
+                        tau=1.,
+                        device=device)
     model = model.to(device)
     
     if debug:
