@@ -37,7 +37,7 @@ def print_metrics(train, valid):
         metrics.append(index)
     return AsciiTable(metrics).table
 
-def plot_loss(epoch, train, valid):
+def plot_loss(epoch, train, valid, filename=None):
     tx, ty = list(train.keys()), list(train.values())
     vx, vy = list(valid.keys()), list(valid.values())
     
@@ -52,7 +52,9 @@ def plot_loss(epoch, train, valid):
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     
-    plt.show()
+    if filename is not None:
+        plt.savefig(filename)
+    # plt.show()
     
     
     

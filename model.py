@@ -27,6 +27,7 @@ class DiscreteVAE(nn.Module):
                        latent_dims=64,
                        vector_dims=11,
                        
+                       alpha=1.,
                        beta=1.,
                        tau=1.,
                        device=None
@@ -39,10 +40,11 @@ class DiscreteVAE(nn.Module):
         
         self.tau = tau
         self.beta = beta
+        self.alpha = alpha
         self.device = device
         
         self.encoder = DiscreteEncoder(in_ch=in_channels)
-        self.discrete = nn.Linear(8192, latent_dims * vector_dims)
+        self.discrete = nn.Linear(4096, latent_dims * vector_dims)
         
         self.decoder = DiscreteDecoder(in_ch=latent_dims * vector_dims, out_ch=out_channels)
         
@@ -66,7 +68,7 @@ class DiscreteVAE(nn.Module):
     
     def encode(self, x):
         enc = self.encoder(x)
-        enc = enc.view(-1, 8192)
+        enc = enc.view(-1, 4096)
         enc = self.discrete(enc)
         
         logits = enc.view(-1, self.latent_dims, self.vector_dims)
@@ -77,7 +79,7 @@ class DiscreteVAE(nn.Module):
     def decode(self, x):
         x = x.view(-1, self.latent_dims * self.vector_dims)
         dec = self.decoder(x)
-        dec = dec.view(-1, 180, 2)
+        dec = dec.view(-1, 176, 2)
         
         return dec
     
@@ -89,7 +91,10 @@ class DiscreteVAE(nn.Module):
         return pts, qy
     
     def loss(self, pts, gt, qy, eps=1e-20):
-        recon_loss = F.mse_loss(pts, gt, reduction='sum') / pts.shape[0]
+        disk_loss = F.mse_loss(pts, gt, reduction='sum') / pts.shape[0]
+        mark_index = [0, 29, 88, 117]
+        mark_loss = F.mse_loss(pts[:, mark_index], gt[:, mark_index], reduction='sum') / pts.shape[0]
+        recon_loss = mark_loss + self.alpha * disk_loss
         
         log_qy = torch.log(qy + eps)
         g = torch.log(torch.Tensor([1.0/self.vector_dims])).to(self.device)
@@ -99,11 +104,11 @@ class DiscreteVAE(nn.Module):
         
 
 if __name__ == '__main__':
-    debug = False
+    debug = True
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
+
     model = DiscreteVAE(in_channels=1,
-                        out_channels=180*2,
+                        out_channels=176*2,
                         
                         latent_dims=64,
                         vector_dims=11,
@@ -111,15 +116,16 @@ if __name__ == '__main__':
                         beta=1.,
                         tau=1.,
                         device=device)
+    
     model = model.to(device)
     
     if debug:
         from torchsummary import summary
-        summary(model, input_size=(1, 128, 128))
+        summary(model, input_size=(1, 64, 128))
     
     if debug:
         from torch.autograd import Variable
-        img = Variable(torch.rand(2, 1, 128, 128))
+        img = Variable(torch.rand(2, 1, 64, 128))
         img = img.to(device)
         pts, qy = model(img)
         print(pts.shape, qy.shape)

@@ -1,6 +1,7 @@
 import os
 import argparse
 import tqdm
+import numpy as np
 
 import torch
 import torch.optim as optim
@@ -42,6 +43,7 @@ class Trainer(object):
         self.valid_dict = {}
         
     def train(self):
+        print(f"{self.args.task_name} is under training")
         num_epoch = self.args.epoch
         
         for epoch in tqdm.tqdm(range(num_epoch)):
@@ -56,7 +58,7 @@ class Trainer(object):
     def evaluate(self, epoch):
         print("evaluating...")
         valid_loss = 0
-        for batch_i, (x, mesh) in enumerate(self.dataloader['valid']):
+        for batch_i, (x, _, mesh) in enumerate(self.dataloader['valid']):
             x, mesh = x.float(), mesh.float()
             x, mesh = x.to(self.device), mesh.to(self.device)
             
@@ -72,19 +74,20 @@ class Trainer(object):
         self.logger.log("INF", f"{epoch}: valid loss is {valid_loss}")
         self.logger.scalar_summary("valid/loss", valid_loss, epoch)
         
-    def eval_record(self, epoch):
+    def eval_record(self, epoch, filename=None):
         metrics = uts.print_metrics(self.train_dict, self.valid_dict)
         print(f"util {epoch}:\n{metrics}")
         self.logger.log("INF", f"util {epoch}:\n{metrics}")
         
-        uts.plot_loss(epoch, self.train_dict, self.valid_dict)
+        uts.plot_loss(epoch, self.train_dict, self.valid_dict, filename)
         
     
     def run_single_step(self, epoch):
         self.model.train()
         train_loss = 0
+        batch_step = len(self.dataloader['train']) // (self.args.batch_size * self.args.batch_step)
         
-        for batch_i, (x, mesh) in enumerate(self.dataloader['train']):
+        for batch_i, (x, _, mesh) in enumerate(self.dataloader['train']):
             x, mesh = x.float(), mesh.float()
             x, mesh = x.to(self.device), mesh.to(self.device)
             self.optimizer.zero_grad()
@@ -94,6 +97,12 @@ class Trainer(object):
                 loss = self.model.loss(pts, mesh, qy)
                 loss.backward()
                 self.optimizer.step()
+
+                # optimize on tau
+                if batch_i % batch_step == 0:
+                    model.tau = np.maximum(model.tau * np.exp(-3e-5 * batch_i),
+                                           0.5)
+                    self.logger.log("INF", f"E{epoch}B{batch_i}is : {model.tau}")
             
             train_loss += loss.item()
         
@@ -106,7 +115,7 @@ class Trainer(object):
         
         if epoch % self.args.eval_step == 0:
             self.evaluate(epoch)
-            self.eval_record(epoch)
+            self.eval_record(epoch, f"{self.args.sav_pth}{self.args.task_name}_{self.args.task_name}_{epoch}.jpg")
         
         if epoch % self.args.save_step == 0:
             torch.save(self.model.state_dict(), f"{self.args.sav_pth}ckpt_{self.args.task_name}_{epoch}.pth")
@@ -117,12 +126,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=5)
+    parser.add_argument("--epoch", type=int, default=150)
     parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--task_name", type=str, default="test")
+    parser.add_argument("--task_name", type=str, default="task")
+    parser.add_argument("--batch_step", type=int, default=10)
     
-    parser.add_argument("--eval_step", type=int, default=2)
-    parser.add_argument("--save_step", type=int, default=2)
+    parser.add_argument("--eval_step", type=int, default=10)
+    parser.add_argument("--save_step", type=int, default=20)
     
     parser.add_argument("--log_pth", type=str, default="./logs/")
     parser.add_argument("--sav_pth", type=str, default="./saves/")
@@ -133,9 +143,9 @@ if __name__ == '__main__':
     dataset = {}
     for param in ['train', 'valid']:
         dataset[param] = SpineDataset(f"dataset/{param}.txt")
-    model = DiscreteVAE(in_channels=1, out_channels=180*2, 
+    model = DiscreteVAE(in_channels=1, out_channels=176*2, 
                         latent_dims=64, vector_dims=11, 
-                        beta=1., tau=1., 
+                        alpha=1., beta=1., tau=1., 
                         device=args.device)
     
     trainer = Trainer(args, dataset, model)
