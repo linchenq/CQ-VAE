@@ -2,7 +2,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils.ops import DiscreteEncoder, DiscreteDecoder
+from utils.ops import DiscreteEncoder, DiscreteDecoder, RegressAutoEncoder
+from utils.loss import DiscreteLoss
+
+'''
+I -> Encoder -> P(Z) -gumbel-softmax sample-> z(one-hot) -> decoder -> segmentation mask
+                 |                                              |
+                 v                                           ^  -----------> regression points
+                 z_mean                                      |                   |
+                                                               <---- enc <------
+'''
 
 class DiscreteVAE(nn.Module):
     ''' Encoder Structure: ResEncoder -> flatten -> discrete distribution -> logits
@@ -22,7 +31,8 @@ class DiscreteVAE(nn.Module):
         # logits: (batch_size, lat_dims * vec_dims)
     '''
     def __init__(self, in_channels=1,
-                       out_channels=180*2,
+                       out_channels=176*2,
+                       seg_channels=1,
                        
                        latent_dims=64,
                        vector_dims=11,
@@ -38,15 +48,16 @@ class DiscreteVAE(nn.Module):
         self.latent_dims = latent_dims
         self.vector_dims = vector_dims
         
-        self.tau = tau
-        self.beta = beta
         self.alpha = alpha
+        self.beta = beta
+        self.tau = tau
         self.device = device
         
         self.encoder = DiscreteEncoder(in_ch=in_channels)
-        self.discrete = nn.Linear(4096, latent_dims * vector_dims)
+        self.discrete = nn.Linear(8192, latent_dims * vector_dims)
         
-        self.decoder = DiscreteDecoder(in_ch=latent_dims * vector_dims, out_ch=out_channels)
+        self.decoder = DiscreteDecoder(in_ch=latent_dims * vector_dims, out_ch=out_channels, seg_ch=seg_channels)
+        self.autoencoder = RegressAutoEncoder(in_ch=out_channels, latent_dims=latent_dims, vector_dims=vector_dims)
         
         self.softmax = nn.Softmax(dim=-1)
         self.relu = nn.ReLU()
@@ -68,7 +79,7 @@ class DiscreteVAE(nn.Module):
     
     def encode(self, x):
         enc = self.encoder(x)
-        enc = enc.view(-1, 4096)
+        enc = enc.view(-1, 8192)
         enc = self.discrete(enc)
         
         logits = enc.view(-1, self.latent_dims, self.vector_dims)
@@ -78,59 +89,54 @@ class DiscreteVAE(nn.Module):
 
     def decode(self, x):
         x = x.view(-1, self.latent_dims * self.vector_dims)
-        dec = self.decoder(x)
-        dec = dec.view(-1, 176, 2)
+        reg, seg = self.decoder(x)
+        rz = self.autoencoder(reg)
+        reg = reg.view(-1, 176, 2)
         
-        return dec
+        return reg, seg, rz
     
     def forward(self, x):
         logits, qy = self.encode(x)
         z = self.reparametrize(logits)
-        pts = self.decode(z)
+        pts, mask, rz = self.decode(z)
+        best, _, _ = self.decode(logits)
         
-        return pts, qy
-    
-    def loss(self, pts, gt, qy, eps=1e-20):
-        disk_loss = F.mse_loss(pts, gt, reduction='sum') / pts.shape[0]
-        mark_index = [0, 29, 88, 117]
-        mark_loss = F.mse_loss(pts[:, mark_index], gt[:, mark_index], reduction='sum') / pts.shape[0]
-        recon_loss = mark_loss + self.alpha * disk_loss
-        
-        log_qy = torch.log(qy + eps)
-        g = torch.log(torch.Tensor([1.0/self.vector_dims])).to(self.device)
-        kld = torch.sum(qy * (log_qy - g), dim=-1).mean()
-        
-        return (recon_loss + self.beta * kld) * pts.shape[0]
-        
+        return pts, mask, qy, z, rz, best
+
 
 if __name__ == '__main__':
-    debug = True
+    debug, summary = True, False
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     model = DiscreteVAE(in_channels=1,
                         out_channels=176*2,
+                        seg_channels=1,
                         
                         latent_dims=64,
                         vector_dims=11,
                         
+                        alpha=1.,
                         beta=1.,
                         tau=1.,
                         device=device)
     
     model = model.to(device)
+    model_loss = DiscreteLoss(alpha=model.alpha, beta=model.beta, device=device)
     
-    if debug:
+    if summary:
         from torchsummary import summary
-        summary(model, input_size=(1, 64, 128))
+        summary(model, input_size=(1, 128, 128))
     
     if debug:
         from torch.autograd import Variable
-        img = Variable(torch.rand(2, 1, 64, 128))
+        img = Variable(torch.rand(2, 1, 128, 128))
         img = img.to(device)
-        pts, qy = model(img)
-        print(pts.shape, qy.shape)
+        pts, mask, qy, z, rz, best = model(img)
+        print(pts.shape, mask.shape, qy.shape, z.shape, rz.shape, best.shape)
         
-        gt = Variable(torch.rand(*pts.size()))
-        gt = gt.cuda()
-        loss = model.loss(pts, gt, qy)
+        pts_gt = Variable(torch.rand(*pts.size()))
+        pts_gt = pts_gt.cuda()
+        mask_gt = Variable(torch.rand(*mask.size()))
+        mask_gt = mask_gt.cuda()
+        loss = model_loss.forward(pts, pts_gt, mask, mask_gt, qy, model.vector_dims)
         print(loss)
