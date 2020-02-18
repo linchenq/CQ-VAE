@@ -7,11 +7,11 @@ import cfgs
 
 if __name__ == '__main__':
     #%% preprocess
-    src, dst = "../source/", "../data/"
-    for filename in tqdm.tqdm(os.listdir(src)):
-        pre = Preprocessor(f"{src}{filename}",
-                           f"{dst}{filename}",
-                           norm=True, bone=False, crop=True)
+    src, dst = "../source", "../data"
+    for folders in tqdm.tqdm(os.listdir(src)):
+        pre = Preprocessor(f"{src}/{folders}",
+                           f"{dst}/{folders}_combined.mat",
+                           norm=True, bone=False, crop=False)
         pre.forward()
     
     #%% train/test split
