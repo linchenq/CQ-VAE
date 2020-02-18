@@ -1,6 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage.draw import polygon2mask
 from terminaltables import AsciiTable
+
+def poly2mask(height, width, poly):
+    return np.transpose(polygon2mask((height, width), poly))
 
 def show_images(images, ncols, plts=None):
     n_images = len(images)

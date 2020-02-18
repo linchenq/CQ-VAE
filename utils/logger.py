@@ -29,11 +29,11 @@ class Logger(object):
         self.writer.add_summary(summary, step)
 
     def log(self, mode, msg):
-        if mode == "INF":
+        if mode == "info":
             self.logger.info(msg)
-        elif mode == "WAR":
+        elif mode == "warn":
             self.logger.warning(msg)
-        elif mode == "BUG":
+        elif mode == "debug":
             self.logger.debug(msg)
         else:
             raise NotImplementedError
