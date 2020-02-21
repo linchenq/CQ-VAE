@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.io as sio
-import utils as uts
+import utils.util as uts
 
 import torch
 from torch.utils.data import Dataset
@@ -18,6 +18,7 @@ class SpineDataset:
         mat = sio.loadmat(cur_pth)
         
         img, disks = mat['img'], mat['disk']
+        
         return img, disks
 
 

@@ -31,7 +31,7 @@ class Logger(object):
     def log(self, mode, msg):
         if mode == "info":
             self.logger.info(msg)
-        elif mode == "warn":
+        elif mode == "warning":
             self.logger.warning(msg)
         elif mode == "debug":
             self.logger.debug(msg)

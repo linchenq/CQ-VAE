@@ -67,6 +67,10 @@ def show_images(images, ncols, plts=None):
             plt.plot(plts[i][:,0], plts[i][:,1], 'g-')
         # fig.set_size_inches(np.array(fig.get_size_inches())*n_images)
         plt.show()
+
+def dict_add(base, x):
+    for key in base.items():
+        base[key] += x[key]        
     
 def print_metrics(train, valid):
     metrics = [['Epoch', 'Train Loss', 'Valid Loss']]
