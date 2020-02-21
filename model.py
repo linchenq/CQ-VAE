@@ -40,7 +40,9 @@ class DiscreteVAE(nn.Module):
                        alpha=1.,
                        beta=1.,
                        tau=1.,
-                       device=None
+                       device=None,
+                       
+                       sample_step=128
                 ):
         
         super(DiscreteVAE, self).__init__()
@@ -52,6 +54,8 @@ class DiscreteVAE(nn.Module):
         self.beta = beta
         self.tau = tau
         self.device = device
+        
+        self.sample_step = sample_step
         
         self.encoder = DiscreteEncoder(in_ch=in_channels)
         self.discrete = nn.Linear(8192, latent_dims * vector_dims)
@@ -95,13 +99,32 @@ class DiscreteVAE(nn.Module):
         
         return reg, seg, rz
     
-    def forward(self, x):
+    def forward(self, x, step=None):
+        '''
+            zs: list of z, sampled z from P(Z)
+            decs: list of tuple(pts, mask, rz), regarding loss
+        '''
+        zs, regs, segs, rzs = [], [], [], []
         logits, qy = self.encode(x)
-        z = self.reparametrize(logits)
-        pts, mask, rz = self.decode(z)
-        best, _, _ = self.decode(logits)
         
-        return pts, mask, qy, z, rz, best
+        if step is None:
+            step = self.sample_step
+            
+        for i in range(step):
+            if torch.rand(1) > 0.5:
+                z = self.reparametrize(logits)
+                reg, seg, rz = self.decode(z)
+                
+                zs, regs, segs, rzs = zs + [z], regs + [reg], segs + [seg], rzs + [rz]
+        
+        zs, rzs = torch.stack(zs, dim=0).permute(1, 0, 2, 3), torch.stack(rzs, dim=0).permute(1, 0, 2, 3)
+        regs= torch.stack(regs, dim=0).permute(1, 0, 2, 3)
+        segs = torch.stack(segs, dim=0).permute(1, 0, 2, 3, 4).squeeze(dim=2)
+        decs = (regs, segs, rzs)
+        
+        best = self.decode(logits)
+        
+        return zs, decs, qy, logits, best
 
 
 if __name__ == '__main__':
@@ -118,7 +141,8 @@ if __name__ == '__main__':
                         alpha=1.,
                         beta=1.,
                         tau=1.,
-                        device=device)
+                        device=device,
+                        sample_step=128)
     
     model = model.to(device)
     model_loss = DiscreteLoss(alpha=model.alpha, beta=model.beta, device=device)
@@ -129,14 +153,8 @@ if __name__ == '__main__':
     
     if debug:
         from torch.autograd import Variable
-        img = Variable(torch.rand(2, 1, 128, 128))
-        img = img.to(device)
-        pts, mask, qy, z, rz, best = model(img)
-        print(pts.shape, mask.shape, qy.shape, z.shape, rz.shape, best.shape)
+        img = Variable(torch.rand(2, 1, 128, 128)).to(device)
+        zs, decs, qy, logits, best = model(img)
+        pts, masks, zrs = decs
+        print(f"tensor shape: {pts.shape}, {masks.shape}, {zrs.shape}, {zs.shape}")
         
-        pts_gt = Variable(torch.rand(*pts.size()))
-        pts_gt = pts_gt.cuda()
-        mask_gt = Variable(torch.rand(*mask.size()))
-        mask_gt = mask_gt.cuda()
-        loss = model_loss.forward(pts, pts_gt, mask, mask_gt, qy, model.vector_dims)
-        print(loss)
