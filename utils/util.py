@@ -61,8 +61,9 @@ def dict_mul(base, rate):
     return base
 
 def print_metrics(epoch, met_dict):
-    metrics = [['Epoch'] + met_dict.keys()]
-    index = [str(epoch)] + ["%.2f" % str(i) for i in met_dict.values()]
+    metrics = [['Epoch'] + list(met_dict.keys())]
+    met_v = ["%.2f" % i for i in met_dict.values()]
+    index = [str(epoch)] + [str(i) for i in met_v]
     metrics.append(index)
     
     return AsciiTable(metrics).table
@@ -70,14 +71,17 @@ def print_metrics(epoch, met_dict):
 def summary_metrics(train, valid):
     metrics = ['Epoch']
     for key in train[0].keys():
-        metircs = metrics + f"T_{key}" + f"V_{key}"
+        metrics = metrics + [f"T_{key}"] + [f"V_{key}"]
     metrics = [metrics]
     
     for epoch in train.keys():
         index = [str(epoch)]
         for loss in train[epoch].keys():
             index.append(train[epoch][loss])
-            index.append(valid[epoch][loss] if loss in valid.keys() else '---')
+            if epoch in valid.keys() and loss in valid[epoch].keys():
+                index.append(valid[epoch][loss])
+            else:
+                index.append('---')
         metrics.append(index)
     
     return AsciiTable(metrics).table

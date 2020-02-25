@@ -98,7 +98,7 @@ class Trainer(object):
                 epoch_dict = loss_dict
             else:
                 epoch_dict = uts.dict_add(epoch_dict, loss_dict)
-                
+
         self.evaluator.eval_model(epoch, epoch_loss, epoch_dict, len(self.dataloader['train']), "train")
 
         if epoch % self.args.eval_step == 0:
