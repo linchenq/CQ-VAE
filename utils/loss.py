@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import utils.util as uts
+
 class DiscreteLoss(nn.Module):
     '''
     alpha: linear variable for  segmentation loss
@@ -52,7 +54,7 @@ class DiscreteLoss(nn.Module):
             "best_segmentation_loss": best_seg.item()
         }
 
-        return ret * pts.shape[0], ret_dict
+        return ret * pts.shape[0], uts.dict_mul(ret_dict, pts.shape[0])
     
     def regression_loss(self, rz, z, x, gt):
         # autoencoder loss

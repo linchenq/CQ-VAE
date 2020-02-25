@@ -39,6 +39,8 @@ class DiscreteVAE(nn.Module):
                        
                        alpha=1.,
                        beta=1.,
+                       gamma=1.,
+                       
                        tau=1.,
                        device=None,
                        
@@ -52,6 +54,8 @@ class DiscreteVAE(nn.Module):
         
         self.alpha = alpha
         self.beta = beta
+        self.gamma = gamma
+        
         self.tau = tau
         self.device = device
         
@@ -122,7 +126,9 @@ class DiscreteVAE(nn.Module):
         segs = torch.stack(segs, dim=0).permute(1, 0, 2, 3, 4).squeeze(dim=2)
         decs = (regs, segs, rzs)
         
-        best = self.decode(logits)
+        best_reg, best_seg, best_rz = self.decode(logits)
+        best_seg = best_seg.squeeze(dim=1)
+        best = (best_reg, best_seg, best_rz)
         
         return zs, decs, qy, logits, best
 
@@ -140,12 +146,17 @@ if __name__ == '__main__':
                         
                         alpha=1.,
                         beta=1.,
+                        gamma=1.,
+                        
                         tau=1.,
                         device=device,
                         sample_step=128)
     
     model = model.to(device)
-    model_loss = DiscreteLoss(alpha=model.alpha, beta=model.beta, device=device)
+    model_loss = DiscreteLoss(alpha=model.alpha,
+                              beta=model.beta,
+                              gamma=model.gamma,
+                              device=device)
     
     if summary:
         from torchsummary import summary

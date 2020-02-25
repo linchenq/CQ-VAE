@@ -7,48 +7,67 @@ class Evaluator(object):
         self.debug = debug
         self.logger = logger
         
-        self.train_loss, valid_loss = {}, {}
+        self.save_train = {}
+        self.save_valid = {}
     
-    def train_eval(self, epoch, loss, size):
+    def eval_model(self, epoch, loss, loss_dict, size, mode):
         loss /= size
-        self.train_loss[epoch] = loss
+        for key in loss_dict.keys():
+            loss_dict[key] /= size
+        index = {
+            "train": self.save_train,
+            "valid": self.save_valid
+        }
         
-        self.log("info", f"{epoch}: train loss is {loss}")
-        self.logger.scalar_summary("train/loss", loss, epoch)
+        index[mode][epoch] = {"loss": "%.4f" % loss}
+        self.log("info", f"{epoch}: {mode} loss is {loss}")
+        self.logger.scalar_summary(f"{mode}/loss", loss, epoch)
+        for key, value in loss_dict.items():
+            index[mode][epoch] = {"loss": "%.4f" % loss}
+            self.logger.scalar_summary(f"{mode}/{key}", value, epoch)
+        
         if self.debug:
-            print(f"{epoch}: train loss is {loss}")
+            print(f"{epoch}: {mode} loss is {loss}")
+            print(uts.print_metrics(epoch, loss_dict))
+    
+    def eval_valid(self, epoch, model, data, device):
+        model_loss = 0
+        model_dict = None
         
-    def valid_eval(self, epoch, model, data, device, filename):
-        loss = 0
-        for batch_i, (x, meshes) in enumerate(data):
+        for batch_i, (x, meshes, best_mesh, best_mask) in enumerate(data):
             x = torch.unsqueeze(x, dim=1)
-            x = x.float().to(device)
-            meshes = [mesh.float().to(device) for mesh in meshes]
+            x = x.float().to(self.device)
+            meshes = [mesh.float().to(self.device) for mesh in meshes]
+            best_mesh, best_mask = best_mesh.float().to(self.device), best_mask.float().to(self.device)
             
             with torch.no_grad():
-                zs, decs, qy, logits, best = model(x, step=None)
+                zs, decs, qy, logits, best = self.model(x, step=None)
                 pts, masks = uts.batch_linear_combination(cfg="cfgs/cfgs_table.npy",
                                                           target=zs.shape[1], 
-                                                          x_shape=x.shape[2:], meshes=meshes,
-                                                          device=device)
-                # valid_loss = inference
-                # loss += valid_loss.item()
-        loss /= len(data)
-        self.valid_loss[epoch] = loss
+                                                          x_shape=x.shape[2:],
+                                                          meshes=meshes,
+                                                          best_mesh=best_mesh,
+                                                          device=self.device)
+    
+                loss, loss_dict = self.loss.forward(zs, decs, qy, logits, best,
+                                                    pts, masks,
+                                                    best_mesh, best_mask,
+                                                    self.model.vector_dims)
+                
+                model_loss += loss.item()
+                if model_dict is None:
+                    model_dict = loss_dict
+                else:
+                    model_dict = uts.dict_add(model_dict, loss_dict)
+            
+        self.eval_model(epoch, model_loss, model_dict, len(data), "valid")
         
-        self.log("info", f"{epoch}: valid loss is {loss}")
-        self.logger.scalar_summary("valid/loss", loss, epoch)
+    def summary_valid(self, epoch):
+        metrics = uts.summary_metrics(self.save_train, self.save_valid)
+        self.log("info", f"until {epoch}:\n{metrics}")
         
         if self.debug:
-            print(f"{epoch}: valid loss is {loss}")
-        
-    def metric_eval(self, epoch, filename):
-        metrics = uts.print_metrics(self.train_dict, self.valid_dict)
-        self.log("info", f"util {epoch}:\n{metrics}")
-        uts.plot_loss(epoch, self.train_dict, self.valid_dict, filename)
-        
-        if self.debug:
-            print(f"util {epoch}:\n{metrics}")
+            print(f"until {epoch}:\n{metrics}")
     
     def log(self, hint, message):
         self.logger.log(hint, message)

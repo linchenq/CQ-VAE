@@ -18,15 +18,26 @@ class SpineDataset:
         mat = sio.loadmat(cur_pth)
         
         img, disks = mat['img'], mat['disk']
+        best, best_mask = mat['disk'][0], uts.poly2mask(img.shape[0], img.shape[1], mat['disk'][0])
         
-        return img, disks
+        return img, disks, best, best_mask
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     ds = SpineDataset(r"../dataset/train.txt")
     
-    for i, (img, pts) in enumerate(ds):
+    for i, (img, pts, best, best_mask) in enumerate(ds):
+        fig, ax = plt.subplots()
+        ax.plot()
+        ax.imshow(img, cmap='gray')
+        ax.plot(best[:, 0], best[:, 1], 'g-')
+        ax.scatter(best[[0,29,88,117], 0], best[[0,29,88,117], 1], marker = 'o', color = 'b')
+        
+        fig1, ax1 = plt.subplots()
+        ax1.plot()
+        ax1.imshow(best_mask, cmap='gray')
+        
         for pt in pts:
             fig, ax = plt.subplots()
             ax.plot()
@@ -39,6 +50,5 @@ if __name__ == '__main__':
             ax1.plot()
             mask = uts.poly2mask(128, 128, pt)
             ax1.imshow(mask, cmap='gray')
-            
         break
     
