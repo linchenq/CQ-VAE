@@ -20,7 +20,7 @@ if __name__ == '__main__':
     '''
     out = []
     rate = 0.01
-    remain = 3
+    remain = 4
     sumed = 100
     step = 5
     rets = recursive(remain=remain, sumed=sumed, step=step)

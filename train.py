@@ -56,7 +56,8 @@ class Trainer(object):
         print(f"{self.args.task_name} is under training")
 
         num_epoch = self.args.epoch
-        for epoch in tqdm.tqdm(range(num_epoch)):
+        # for epoch in tqdm.tqdm(range(num_epoch)):
+        for epoch in range(num_epoch):
             self.run_single_step(epoch)
     
     def run_single_step(self, epoch):
@@ -69,7 +70,7 @@ class Trainer(object):
         batch_step_tau = len(self.dataloader['train']) // \
                          (self.args.batch_size * self.args.batch_step_tau)
         
-        for batch_i, (x, meshes, best_mesh, best_mask) in enumerate(self.dataloader['train']):
+        for batch_i, (x, meshes, best_mesh, best_mask) in tqdm.tqdm(enumerate(self.dataloader['train'])):
             x = torch.unsqueeze(x, dim=1)
             x = x.float().to(self.device)
             meshes = [mesh.float().to(self.device) for mesh in meshes]

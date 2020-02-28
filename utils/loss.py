@@ -31,16 +31,16 @@ class DiscreteLoss(nn.Module):
         '''
         pts, masks, rzs = decs
         best_pt, best_mask, best_rz = best
-        mapping = uts.batch_match_shape(pts, pts_gt)
+        mapping = uts.batch_match_shape(pts.cpu(), pts_gt.cpu())
 
         kld = self.kld_loss(qy, vector_dims)
         
-        #seg = self.mapping_segmentation_loss(masks, masks_gt, mapping)
-        seg = self.segmentation_loss(masks, masks_gt)
+        seg = self.mapping_segmentation_loss(masks, masks_gt, mapping)
+        # seg = self.segmentation_loss(masks, masks_gt)
         best_seg = self.segmentation_loss(best_mask, best_mask_gt)
         
-        #auto, reg = self.mapping_regression_loss(rzs, zs, pts, pts_gt, mapping)
-        auto, reg = self.regression_loss(rzs, zs, pts, pts_gt)
+        auto, reg = self.mapping_regression_loss(rzs, zs, pts, pts_gt, mapping)
+        # auto, reg = self.regression_loss(rzs, zs, pts, pts_gt)
         best_auto, best_reg = self.regression_loss(best_rz, logits, best_pt, best_pt_gt)
         
         ret = self.gamma * (best_reg + best_auto + self.alpha * best_seg) +\
