@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 import utils.util as uts
 from model import DiscreteVAE
-from evaluates import Evaluator
+from evals.evaluates import Evaluator
 from utils.loss import DiscreteLoss
 from utils.datasets import SpineDataset
 from utils.logger import Logger
@@ -24,6 +24,13 @@ class Trainer(object):
         }
         
         # prerequistites and log initial
+        
+        # Trick Modification for multiple processes
+        if self.args.log_pth == "./logs/":
+            self.args.log_pth = f"./logs_{self.args.task_name}/"
+        if self.args.sav_pth == "./saves/":
+            self.args.sav_pth = f"./saves_{self.args.task_name}/"
+            
         os.makedirs(self.args.log_pth, exist_ok=True)
         os.makedirs(self.args.sav_pth, exist_ok=True)
         
@@ -116,16 +123,16 @@ class Trainer(object):
 if __name__ == '__main__':
         
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", type=int, default=2)
+    parser.add_argument("--batch_size", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=15)
+    parser.add_argument("--epoch", type=int, default=50)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--task_name", type=str, default="debug_task")
     parser.add_argument("--sample_step", type=int, default=128)
     parser.add_argument("--batch_step_tau", type=int, default=2)
     
-    parser.add_argument("--eval_step", type=int, default=2)
-    parser.add_argument("--save_step", type=int, default=2)
+    parser.add_argument("--eval_step", type=int, default=5)
+    parser.add_argument("--save_step", type=int, default=10)
     
     parser.add_argument("--log_pth", type=str, default="./logs/")
     parser.add_argument("--sav_pth", type=str, default="./saves/")
