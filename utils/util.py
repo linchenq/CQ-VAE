@@ -18,20 +18,18 @@ INDEX:
 def poly2mask(height, width, poly):
     return np.transpose(polygon2mask((height, width), poly)).astype(int)
 
-def linear_combination(cfg, target, x_shape, meshes, best_mesh, device):
+def linear_combination(cfg, target, x_shape, meshes, random_seed, device):
     '''
     meshes: w/o batch dims
     '''
     selection = np.load(cfg)
+    random.seed(random_seed)
     indexes = random.sample(range(0, selection.shape[0]), target)
     
     pts, masks = [], []
     for index in indexes:
         gen_pt = [selection[index, i] * meshes[i] for i in range(len(meshes))]
         pt = torch.stack(gen_pt, dim=0).sum(dim=0)
-        if best_mesh is not None:
-            random_rate = 0.5
-            pt = random_rate * best_mesh + (1.0 - random_rate) * pt
         pts.append(pt)
         
         mask = poly2mask(x_shape[0], x_shape[1], pt.cpu().numpy())
@@ -40,15 +38,15 @@ def linear_combination(cfg, target, x_shape, meshes, best_mesh, device):
         
     return torch.stack(pts, dim=0), torch.stack(masks, dim=0).float()
 
-def batch_linear_combination(cfg, target, x_shape, meshes, best_mesh, device):
+def batch_linear_combination(cfg, target, x_shape, meshes, random_seed, device):
     '''
     cfg: permutation based on step size, saved as .npy
     target: length of generated pts, the target size to generate
     meshes: (batch, len, pts.shape[0], pts.shape[1])
     '''
     pts, masks = [], []
-    for batch, batch_best in zip(meshes, best_mesh):
-        pt, mask = linear_combination(cfg, target, x_shape, batch, batch_best, device)
+    for batch in meshes:
+        pt, mask = linear_combination(cfg, target, x_shape, batch, random_seed, device)
         pts.append(pt)
         masks.append(mask)
         
@@ -173,6 +171,14 @@ def show_images(images, ncols, plts=None):
             plt.plot(plts[i][:,0], plts[i][:,1], 'g-')
         # fig.set_size_inches(np.array(fig.get_size_inches())*n_images)
         plt.show()
+        
+def show_image_tmp(images, points):
+    n_images = len(images)
+    
+    for i in range(n_images):
+        fig, ax = plt.subplots()
+        ax.imshow(images[i])
+        ax.plot(points[i][:,0], points[i][:,1], 'g-')
     
     
     
