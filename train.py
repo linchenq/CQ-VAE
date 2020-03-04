@@ -66,6 +66,7 @@ class Trainer(object):
         self.model.train()
         
         epoch_loss = 0
+        epoch_data = 0
         epoch_dict = None
         
         # batch_step_tau
@@ -107,13 +108,15 @@ class Trainer(object):
                 self.evaluator.update_seed(self.random_seed)
             
             # evaluation
-            epoch_loss += loss.item()
+            epoch_loss += loss.item() * x.shape[0]
+            epoch_data += x.shape[0]
+            
             if epoch_dict is None:
                 epoch_dict = loss_dict
             else:
                 epoch_dict = uts.dict_add(epoch_dict, loss_dict)
 
-        self.evaluator.eval_model(epoch, epoch_loss, epoch_dict, len(self.dataloader['train']), "train")
+        self.evaluator.eval_model(epoch, epoch_loss, epoch_dict, epoch_data, "train")
 
         if epoch % self.args.eval_step == 0:
             self.model.eval()

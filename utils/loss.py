@@ -31,23 +31,24 @@ class DiscreteLoss(nn.Module):
         '''
         pts, masks, rzs = decs
         best_pt, best_mask, best_rz = best
-        mapping = uts.batch_match_shape(pts.cpu(), pts_gt.cpu())
+        mapping = uts.batch_match_shape(pts, pts_gt)
 
-        kld = self.kld_loss(qy, vector_dims)
+        kld = self.kld(qy, vector_dims)
         
-        seg = self.mapping_segmentation_loss(masks, masks_gt, mapping)
-        # seg = self.segmentation_loss(masks, masks_gt)
-        best_seg = self.segmentation_loss(best_mask, best_mask_gt)
+        seg = self.segmentation_wmap(masks, masks_gt, mapping)
+        # seg = self.segmentation(masks, masks_gt)
+        best_seg = self.segmentation(best_mask, best_mask_gt)
         
-        auto, reg = self.mapping_regression_loss(rzs, zs, pts, pts_gt, mapping)
-        # auto, reg = self.regression_loss(rzs, zs, pts, pts_gt)
-        best_auto, best_reg = self.regression_loss(best_rz, logits, best_pt, best_pt_gt)
+        auto, reg = self.regression_wmap(rzs, zs, pts, pts_gt, mapping)
+        # auto, reg = self.regression(rzs, zs, pts, pts_gt)
+        best_auto, best_reg = self.regression(best_rz, logits, best_pt, best_pt_gt)
         
         ret = self.gamma * (best_reg + best_auto + self.alpha * best_seg) +\
                 (reg + auto + self.alpha * seg) + \
                 self.beta * kld
         
         ret_dict = {
+            "total_loss": ret.item(),
             "regression_loss": reg.item(),
             "autoencoder_loss": auto.item(),
             "segmentation_loss": seg.item(),
@@ -57,57 +58,48 @@ class DiscreteLoss(nn.Module):
             "best_segmentation_loss": best_seg.item()
         }
 
-        return ret * pts.shape[0], uts.dict_mul(ret_dict, pts.shape[0])
+        return ret, uts.dict_mul(ret_dict, pts.shape[0])
     
-    
-    def regression_loss(self, rz, z, x, gt):
+    def regression(self, rz, z, x, gt):
         # autoencoder loss
-        auto = F.mse_loss(rz, z, reduction="mean")
+        auto = F.mse_loss(rz, z)
         
         # regression loss
-        disk = F.mse_loss(x, gt, reduction="sum") / (x.shape[0] * x.shape[1])
-        landmark = F.mse_loss(x[..., self.mark_index, :], gt[..., self.mark_index, :], reduction="sum") / (x.shape[0] * x.shape[1])
+        disk = F.mse_loss(x, gt)
+        landmark = F.mse_loss(x[..., self.mark_index, :], gt[..., self.mark_index, :])
         
         return auto, (disk + landmark)
      
-    def mapping_regression_loss(self, rz, z, x, gt, mapping):
+    def regression_wmap(self, rz, z, x, gt, mapping):
         if x.shape[0] != gt.shape[0] or rz.shape[0] != z.shape[0] or x.shape[0] != z.shape[0]:
             raise ValueError('Unmatched batch size for regression loss')
         ret_auto, ret_disk, ret_landmark = 0, 0, 0
         
         for batch_i in range(gt.shape[0]):
-            for len_i in range(gt.shape[1]):
+            for len_i in range(gt.shape[1]):                
                 # autoencoder loss
                 ret_auto += F.mse_loss(rz[batch_i, mapping[batch_i, len_i], ...],
-                                       z[batch_i, len_i, ...],
-                                       reduction="mean")
+                                       z[batch_i, len_i, ...])
                 # regression loss
                 ret_disk += F.mse_loss(x[batch_i, mapping[batch_i, len_i], ...],
-                                       gt[batch_i, len_i, ...],
-                                       reduction="sum")
+                                       gt[batch_i, len_i, ...])
                 ret_landmark += F.mse_loss(x[batch_i, mapping[batch_i, len_i], self.mark_index, :],
-                                           gt[batch_i, len_i, self.mark_index, :],
-                                           reduction="sum")
-        ret_auto /= (gt.shape[0] * gt.shape[1])
-        ret_disk /= (gt.shape[0] * gt.shape[1])
-        ret_landmark /= (gt.shape[0] * gt.shape[1])
+                                           gt[batch_i, len_i, self.mark_index, :])
         
         return ret_auto, (ret_disk + ret_landmark)
     
-    
-    
-    def kld_loss(self, qy, vector_dims):
+    def kld(self, qy, vector_dims):
         log_qy = torch.log(qy + self.eps)
         g = torch.log(torch.Tensor([1.0 / vector_dims])).to(self.device)
-        kld = torch.sum(qy * (log_qy - g), dim=-1).mean()
+        kld_loss = torch.sum(qy * (log_qy - g), dim=-1).mean()
         
-        return kld
+        return kld_loss
     
-    def segmentation_loss(self, x, gt):
+    def segmentation(self, x, gt):
         x, gt = x[..., 32:96, :], gt[..., 32:96, :]
-        return F.mse_loss(x, gt, reduction="mean")
+        return F.mse_loss(x, gt)
     
-    def mapping_segmentation_loss(self, x, gt, mapping):
+    def segmentation_wmap(self, x, gt, mapping):
         if x.shape[0] != gt.shape[0]:
             raise ValueError('Unmatched batch size for segmentation loss')
         ret_loss = 0
@@ -115,9 +107,6 @@ class DiscreteLoss(nn.Module):
         for batch_i in range(gt.shape[0]):
             for len_i in range(gt.shape[1]):
                 ret_loss += F.mse_loss(x[batch_i, mapping[batch_i, len_i], ...],
-                                       gt[batch_i, len_i, ...],
-                                       reduction="mean")
-        
-        ret_loss /= (gt.shape[0] * gt.shape[1])
+                                       gt[batch_i, len_i, ...])
         return ret_loss     
         

@@ -44,6 +44,7 @@ class Evaluator(object):
         model.eval()
         
         model_loss = 0
+        model_data = 0
         model_dict = None
         self.loss = DiscreteLoss(alpha=model.alpha, beta=model.beta, gamma=model.gamma, device=device, eps=1e-20)
         
@@ -67,13 +68,14 @@ class Evaluator(object):
                                                     best_mesh, best_mask,
                                                     model.vector_dims)
                 
-                model_loss += loss.item()
+                model_loss += loss.item() * x.shape[0]
+                model_data += x.shape[0]
                 if model_dict is None:
                     model_dict = loss_dict
                 else:
                     model_dict = uts.dict_add(model_dict, loss_dict)
             
-        self.eval_model(epoch, model_loss, model_dict, len(data), "valid")
+        self.eval_model(epoch, model_loss, model_dict, model_data, "valid")
         
     def summary_valid(self, epoch):
         metrics = uts.summary_metrics(self.save_train, self.save_valid)
