@@ -11,7 +11,7 @@ if __name__ == '__main__':
     for folders in tqdm.tqdm(os.listdir(src)):
         pre = Preprocessor(f"{src}/{folders}",
                            f"{dst}/{folders}_combined.mat",
-                           norm=True, keep_bone=False)
+                           norm=True)
         pre.forward()
     
     #%% train/test split

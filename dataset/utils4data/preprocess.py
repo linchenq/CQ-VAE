@@ -3,115 +3,97 @@ import numpy as np
 import scipy.io as sio
 import matplotlib.pyplot as plt
 from skimage.draw import polygon2mask
-'''
-Important Comment for difference between matlab and python
-----------------------------------------------------------
-I(matlab) -> I(matlab centered) -> I(python)
-  (x,y)        (x-64, y-64)     (x-0.5, y-0.5)
-----------------------------------------------------------
-for training phase:
-    1. mesh points (x-64, y-64)
-    2. mask (x-0.5, y-0.5)
-for inference phase:
-    1. mesh points (x_pred - 0.5, y_pred - 0.5) for plot
-    2. mask (x, y)
 
-'''
-
-'''
-Preprocess:
-    init_check: check if image is consistent, check file path
-    init_norm: normalization on images
-    init_boundary: inital boundary points, decide whether the mask contains bone or not
-    init_difference: centered difference for points
-'''
 class Preprocessor():
-    def __init__(self, src, dst, norm=True, keep_bone=False):
-        self.mats, self.img = [], None
-        self.src, self.dst = src, dst
-    
-        if not self.init_check():
-            raise ValueError("Images are not consistent")
+    def __init__(self, src, dst, norm=True):
+        self.disks = []
+        self.img, self.best = None, None
+        self.src = src
+        self.dst = dst
         
-        self.init_norm(norm)
+        self.init_mats(norm)
+        check = self.init_best()
+        if not check:
+            raise ValueError("Best shape NOT found")
         
-        self.init_boundary(keep_bone)
-        
-    def init_check(self):
-        for filenames in os.listdir(self.src):
-            if not os.path.exists(f"{self.src}/{filenames}"):
-                raise FileNotFoundError
-            self.mats.append(sio.loadmat(f"{self.src}/{filenames}"))
-        
-        # double check if images are the same
+    def init_mats(self, norm):
         imgs = []
-        for mat in self.mats:
-            if 'img' in mat:
-                imgs.append(mat['img'])
-        for index in range(0, len(imgs) - 1):
-            if not (imgs[index] == imgs[index + 1]).all():
-                return False
-        self.img = imgs[0]
         
-        return True  
-    
-    def init_norm(self, norm):
+        for filenames in os.listdir(self.src):
+            cur_pth = f"{self.src}/{filenames}"
+            mat, pts = self._mat2pts(cur_pth)
+            self.disks.append(pts)
+            
+            imgs.append(mat['img'])
+        
+        for pre, post in zip(imgs[:-1], imgs[1:]):
+            diff = np.abs(pre - post).sum()
+            if diff > 1e-10:
+                raise ValueError("Images are not consistnet")
+        
+        self.img = imgs[0]
+
         if norm:
             self.img = (self.img - np.min(self.img)) / (np.max(self.img) - np.min(self.img))
     
-    def init_boundary(self, keep_bone):
-        self.landmarks, self.boundary, self.mask = [], [], []
-        
-        for mat in self.mats:
-            self.landmarks.append(mat['disk_landmarks'])
-            self.boundary.append(np.vstack((mat['disk_left'],
-                                            mat['disk_bot'],
-                                            mat['disk_right'],
-                                            mat['disk_up'])))
-            if keep_bone:
-                out_bound = np.vstack((mat['up_bon_left'], mat['disk_left'], mat['bot_bon_left'],
-                                   mat['bot_bon_low'],
-                                   mat['bot_bon_right'], mat['disk_right'], mat['up_bon_right'],
-                                   mat['up_bon_top']))
-                self.mask.append(out_bound)
-            else:
-                self.mask.append(self.boundary[-1])
+    def init_best(self):
+        for filenames in os.listdir(self.src):
+            cur_pth = f"{self.src}/{filenames}"
+            if cur_pth.endswith("@best.mat"):
+                mat, pts = self._mat2pts(cur_pth)
+                self.best = pts
                 
-        self.landmarks = [ele - 64 for ele in self.landmarks]
-        self.boundary = [ele - 64 for ele in self.boundary]
+                return True
+        return False
+    
+    def _mat2pts(self, mat_pth):
+        if not os.path.exists(mat_pth):
+            raise FileNotFoundError
         
+        mat = sio.loadmat(mat_pth)
+        pts = np.vstack((mat['disk_left'],
+                         mat['disk_bot'],
+                         mat['disk_right'],
+                         mat['disk_up']))
+        pts -= 64
+        return mat, pts
+    
     def forward(self):
         self.dic = {
-            "img": self.img,
-            "landmarks": self.landmarks,
-            "disk": self.boundary,
-            "mask": self.mask
+            'img': self.img,
+            'disk': self.disks,
+            'best': self.best
         }
         if self.dst is not None:
             sio.savemat(self.dst, self.dic)
     
-    def output(self):
-        for i in range(len(self.dic["disk"])):
-            fig, ax = plt.subplots()
-            ax.plot()
-            
-            ax.imshow(self.dic["img"], cmap='gray')
-            ax.plot(self.dic["disk"][i][:, 0], self.dic["disk"][i][:, 1], 'g-')
-            ax.scatter(self.dic["landmarks"][i][:, 0], self.dic["landmarks"][i][:, 1], marker='o', color='b')
-            
-            fig1, ax1 = plt.subplots()
-            ax1.plot()
-            mask = np.transpose(polygon2mask((128, 128), self.dic["mask"][i]))
-            ax1.imshow(mask, cmap='gray')
-            ax1.plot(self.dic["disk"][i][:, 0], self.dic["disk"][i][:, 1], 'g-')
-            ax1.scatter(self.dic["landmarks"][i][:, 0], self.dic["landmarks"][i][:, 1], marker='o', color='b')
-
+    def output(self, mat_pth):
+        mat = sio.loadmat(mat_pth)
+        img, disk, best = mat['img'], mat['disk'], mat['best']
+        mark_index = [0, 29, 88, 117]
         
-    
+        fig, ax = plt.subplots()
+        ax.imshow(img, cmap='gray')
+        ax.plot(best[:, 0] + 64, best[:, 1] + 64, 'g-')
+        ax.scatter(best[mark_index, 0] + 64, best[mark_index, 1] + 64, marker = 'o', color = 'b')
+        
+        for i in range(len(disk)):
+            fig1, ax1 = plt.subplots()
+            ax1.imshow(img, cmap='gray')
+            ax1.plot(disk[i][:, 0] + 64, disk[i][:, 1] + 64, 'g-')
+            ax1.scatter(disk[i][mark_index, 0] + 64, disk[i][mark_index, 1] + 64, marker = 'o', color = 'b')
+            
+            mask = np.transpose(polygon2mask((128, 128), disk[i] + 64)).astype(int)
+            fig2, ax2 = plt.subplots()
+            ax2.imshow(mask, cmap='gray')
+            ax2.plot(disk[i][:, 0] + 64, disk[i][:, 1] + 64, 'g-')
+            ax2.scatter(disk[i][mark_index, 0] + 64, disk[i][mark_index, 1] + 64, marker = 'o', color = 'b')
+            
+              
 if __name__ == '__main__':
     src = "../source/Arntzen_1/"
     dst = "../data/Arntzen_1_combined.mat"
-    pre = Preprocessor(src, dst, norm=True, keep_bone=False)
+    pre = Preprocessor(src, dst, norm=True)
     pre.forward()
-    pre.output()
+    pre.output(dst)
 

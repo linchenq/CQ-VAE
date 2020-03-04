@@ -1,5 +1,6 @@
 import numpy as np
 import argparse
+import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import DataLoader
@@ -42,7 +43,7 @@ class Inference(object):
         
         points = []
         for row in range(self.model.latent_dims):
-            selections = np.random.choice(self.model.vector_dims, step, p=z[:, row])
+            selections = np.random.choice(self.model.vector_dims, step, p=torch.squeeze(z[:, row]).cpu().numpy())
             for target in selections:
                 val = torch.zeros(self.model.vector_dims, device=self.device)
                 val[target] = 1
@@ -50,16 +51,22 @@ class Inference(object):
                 replaced = z.clone().detach()
                 replaced[:, row] = val
                 
-                sample, _, _ = self.model.decode(z)
+                sample, _, _ = self.model.decode(replaced)
                 sample = torch.squeeze(sample).cpu()
-                points.append(sample.numpy())
+                sample = sample.numpy() + 64
+                points.append(sample)
             
-            if row == 5:
+            if row == 4:
                 break
             
         images = [torch.squeeze(x).cpu().numpy() for i in range(len(points))]
         
-        uts.show_images(images, step, points)
+        for i in range(len(points)-1):
+            diff = np.abs(points[i] - points[i+1]).sum()    
+            print(f"{i}th is {diff}")
+        
+        uts.show_image_tmp(images, points)
+        # uts.show_images(images, step, points)
 
     def infer(self, best=True, interpolate=True):
         self.model.eval()
@@ -68,6 +75,7 @@ class Inference(object):
             x = torch.unsqueeze(x, dim=1)
             x = x.float().to(self.device)
             best_mesh, best_mask = best_mesh.float().to(self.device), best_mask.float().to(self.device)
+            best_mesh, best_mask = torch.squeeze(best_mesh).cpu().numpy(), torch.squeeze(best_mask).cpu().numpy()
             
             if best:
                 with torch.no_grad():
@@ -75,24 +83,24 @@ class Inference(object):
                     pts, mask = torch.squeeze(pts).cpu().numpy(), torch.squeeze(mask).cpu().numpy()
                     
                     fig, ax = plt.subplots()
-                    ax.plot()
                     ax.imshow(torch.squeeze(x).cpu().numpy(), cmap='gray')
-                    ax.plot(pts[:, 0], pts[:, 1], 'g-')
+                    ax.plot(pts[:, 0] + 64, pts[:, 1] + 64, 'g-')
                     
                     fig_best, ax_best = plt.subplots()
-                    ax_best.plot()
                     ax_best.imshow(torch.squeeze(x).cpu().numpy(), cmap='gray')
-                    ax_best.plot(best_mesh[:, 0], best_mesh[:, 1], 'g-')
+                    ax_best.plot(best_mesh[:, 0] + 64, best_mesh[:, 1] + 64, 'g-')
                     
             if interpolate:
                 with torch.no_grad():
                     self.interpolate(x, step=5)
+                    
+            break
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="cuda:0")
+    parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--sample_step", type=int, default=1)
-    parser.add_argument("--pretrained_weights", type=str, default=None)
+    parser.add_argument("--pretrained_weights", type=str, default="./saves_debug_task/ckpt_debug_task_8.pth")
     
     args = parser.parse_args()
     
@@ -103,5 +111,5 @@ if __name__ == '__main__':
                         device=args.device,
                         sample_step=args.sample_step)
     infer = Inference(args, dataset, model)
-    infer.infer(True, False)
+    infer.infer(False, True)
     
