@@ -4,9 +4,11 @@ from utils.loss import DiscreteLoss
 import utils.util as uts
 
 class Evaluator(object):
-    def __init__(self, logger, debug):
+    def __init__(self, logger, debug, cfg):
         self.debug = debug
         self.logger = logger
+        self.cfg = cfg
+        self.random_seed = 0
         
         self.loss = None
         self.save_train = {}
@@ -35,7 +37,12 @@ class Evaluator(object):
             print(f"{epoch}: {mode} loss is {loss}")
             print(uts.print_metrics(epoch, loss_dict))
     
+    def update_seed(self, random_seed):
+        self.random_seed = random_seed
+    
     def eval_valid(self, epoch, model, data, device):
+        model.eval()
+        
         model_loss = 0
         model_dict = None
         self.loss = DiscreteLoss(alpha=model.alpha, beta=model.beta, gamma=model.gamma, device=device, eps=1e-20)
@@ -48,11 +55,11 @@ class Evaluator(object):
             
             with torch.no_grad():
                 zs, decs, qy, logits, best = model(x, step=None)
-                pts, masks = uts.batch_linear_combination(cfg="../cfgs/cfgs_table.npy",
-                                                          target=zs.shape[1], 
+                pts, masks = uts.batch_linear_combination(cfg=self.cfg,
+                                                          target=zs.shape[1] // 2, 
                                                           x_shape=x.shape[2:],
                                                           meshes=meshes,
-                                                          best_mesh=best_mesh,
+                                                          random_seed=self.random_seed,
                                                           device=device)
     
                 loss, loss_dict = self.loss.forward(zs, decs, qy, logits, best,
