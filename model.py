@@ -113,13 +113,27 @@ class DiscreteVAE(nn.Module):
         
         if step is None:
             step = self.sample_step
-            
+        
+        '''
+        SAMPLING METHOD:
+            [1] x: drop with prob rate; gt: generate matched lr ground truth with the same amount
+            [2] x: generate fixed number of x; gt: generate half amount of gt
+        '''
+        
+        '''
+        # # [1] SAMPLING METHOD
+        # for i in range(step):
+        #     if torch.rand(1) > 0.5:
+        #         z = self.reparametrize(logits)
+        #         reg, seg, rz = self.decode(z)
+        #         zs, regs, segs, rzs = zs + [z], regs + [reg], segs + [seg], rzs + [rz]
+        '''
+        
+        # [2] SAMPLING METHOD
         for i in range(step):
-            if torch.rand(1) > 0.5:
-                z = self.reparametrize(logits)
-                reg, seg, rz = self.decode(z)
-                
-                zs, regs, segs, rzs = zs + [z], regs + [reg], segs + [seg], rzs + [rz]
+            z = self.reparametrize(logits)
+            reg, seg, rz = self.decode(z)
+            zs, regs, segs, rzs = zs + [z], regs + [reg], segs + [seg], rzs + [rz]
         
         zs, rzs = torch.stack(zs, dim=0).permute(1, 0, 2, 3), torch.stack(rzs, dim=0).permute(1, 0, 2, 3)
         regs= torch.stack(regs, dim=0).permute(1, 0, 2, 3)
@@ -148,9 +162,9 @@ if __name__ == '__main__':
                         beta=1.,
                         gamma=1.,
                         
-                        tau=1.,
+                        tau=3.,
                         device=device,
-                        sample_step=128)
+                        sample_step=512)
     
     model = model.to(device)
     model_loss = DiscreteLoss(alpha=model.alpha,
