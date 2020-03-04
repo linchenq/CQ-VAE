@@ -23,16 +23,12 @@ class Inference(object):
         self.model.to(self.device)
     
     def get_best(self, x):
-        self.model.eval()
-       
         with torch.no_grad():
             logits, _ = self.model.encode(x)
             best_reg, best_seg, _ = self.model.decode(logits)
         return best_reg, best_seg
         
     def get_z(self, x):
-        self.model.eval()
-        
         with torch.no_grad():
             logits, _ = self.model.encode(x)
             z = self.model.reparametrize(logits)
@@ -65,8 +61,8 @@ class Inference(object):
             diff = np.abs(points[i] - points[i+1]).sum()    
             print(f"{i}th is {diff}")
         
-        uts.show_image_tmp(images, points)
-        # uts.show_images(images, step, points)
+        # uts.show_image_tmp(images, points)
+        uts.show_images(images, step, points)
 
     def infer(self, best=True, interpolate=True):
         self.model.eval()
