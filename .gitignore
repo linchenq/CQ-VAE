@@ -15,6 +15,7 @@ __pycache__
 # privacy
 # dataset/utils4data/cfgs.py
 dataset/source/AUGM*
+dataset/data/*
 
 # ignored old versions
 # old

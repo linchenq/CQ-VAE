@@ -21,7 +21,7 @@ if __name__ == '__main__':
         pre.forward()
     
     #%% train/test split
-    dst_pth = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    dst_pth = os.path.dirname(os.path.abspath(os.path.dirname(__file__)))
     
     train, valid, _, _ = train_test_split(cfgs.TRAIN, range(len(cfgs.TRAIN)), test_size=0.1, random_state=17)
     
