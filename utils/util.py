@@ -162,7 +162,7 @@ def show_images(images, ncols, plts=None):
     else:
         assert(len(images) == len(plts))
         for i, (image, pts) in enumerate(zip(images, plts)):
-            fig.add_subplot(np.ceil(n_images/float(ncols)), ncols, i+1， figsize=(64,64))
+            fig.add_subplot(np.ceil(n_images/float(ncols)), ncols, i+1)
             plt.subplots_adjust(wspace=0.5, hspace=0.5)
             plt.axis('off')
             if image.ndim == 2:
