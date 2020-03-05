@@ -137,7 +137,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=25)
+    parser.add_argument("--epoch", type=int, default=10)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--task_name", type=str, default="debug_task")
     parser.add_argument("--sample_step", type=int, default=32)

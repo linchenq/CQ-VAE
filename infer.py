@@ -96,7 +96,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--sample_step", type=int, default=1)
-    parser.add_argument("--pretrained_weights", type=str, default="./saves_debug_task/ckpt_debug_task_8.pth")
+    parser.add_argument("--pretrained_weights", type=str, default="./saves_debug_task/ckpt_debug_task_5.pth")
     
     args = parser.parse_args()
     

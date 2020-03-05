@@ -6,9 +6,15 @@ from preprocess import Preprocessor
 import cfgs
 
 if __name__ == '__main__':
+    augmented = False
+    
     #%% preprocess
     src, dst = "../source", "../data"
     for folders in tqdm.tqdm(os.listdir(src)):
+        if folders.startswith("AUGM"):
+            if not augmented:
+                continue
+
         pre = Preprocessor(f"{src}/{folders}",
                            f"{dst}/{folders}_combined.mat",
                            norm=True)
@@ -21,7 +27,11 @@ if __name__ == '__main__':
     
     test = cfgs.TEST
     name_list, para_list = ['train', 'valid', 'test'], [train, valid, test]
+    out_dict = {'train': 0,
+                'valid': 0,
+                'test': 0}
     
+    # Custom dataset
     for name, para in zip(name_list, para_list):
         src_pth = os.path.join(dst_pth, "data")
         
@@ -32,3 +42,12 @@ if __name__ == '__main__':
                 if filename.split('_')[0] in para:
                     out = str(os.path.join(src_pth, filename))
                     print(out, file=fs)
+                    out_dict[name] += 1
+                    
+            if name == 'train' and augmented:
+                if filename.split('-')[0].startswith('AUGM'):
+                    out = str(os.path.join(src_pth, filename))
+                    print(out, file=fs)
+                    out_dict[name] += 1
+    
+    print(out_dict)

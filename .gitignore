@@ -11,11 +11,10 @@ __pycache__
 .spyproject
 
 # custom dataset
-dataset/image
-dataset/mesh
 
 # privacy
-dataset/utils4data/cfgs.py
+# dataset/utils4data/cfgs.py
+dataset/source/AUGM*
 
 # ignored old versions
-old
+# old
