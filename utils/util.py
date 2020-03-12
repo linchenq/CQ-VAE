@@ -32,7 +32,7 @@ def linear_combination(cfg, target, x_shape, meshes, random_seed, device):
         pt = torch.stack(gen_pt, dim=0).sum(dim=0)
         pts.append(pt)
         
-        mask = poly2mask(x_shape[0], x_shape[1], pt.cpu().numpy())
+        mask = poly2mask(x_shape[0], x_shape[1], (pt+64).cpu().numpy())
         mask = torch.from_numpy(mask).to(device)
         masks.append(mask)
         
