@@ -32,7 +32,7 @@ class DiscreteLoss(nn.Module):
         pts, masks, rzs = decs
         best_pt, best_mask, best_rz = best
         mapping = uts.batch_match_shape(pts, pts_gt)
-
+        
         kld = self.kld(qy, vector_dims)
         
         seg = self.segmentation_wmap(masks, masks_gt, mapping)
@@ -83,8 +83,13 @@ class DiscreteLoss(nn.Module):
                 # regression loss
                 ret_disk += F.mse_loss(x[batch_i, mapping[batch_i, len_i], ...],
                                        gt[batch_i, len_i, ...])
+                
                 ret_landmark += F.mse_loss(x[batch_i, mapping[batch_i, len_i], self.mark_index, :],
                                            gt[batch_i, len_i, self.mark_index, :])
+        
+        ret_auto /= (gt.shape[0] * gt.shape[1])
+        ret_disk /= (gt.shape[0] * gt.shape[1])
+        ret_landmark /= (gt.shape[0] * gt.shape[1])
         
         return ret_auto, (ret_disk + ret_landmark)
     
@@ -108,5 +113,8 @@ class DiscreteLoss(nn.Module):
             for len_i in range(gt.shape[1]):
                 ret_loss += F.mse_loss(x[batch_i, mapping[batch_i, len_i], ...],
                                        gt[batch_i, len_i, ...])
+        
+        ret_loss /= (gt.shape[0] * gt.shape[1])
+       
         return ret_loss     
         
