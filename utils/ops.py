@@ -97,10 +97,12 @@ class RegressAutoEncoder(nn.Module):
         )
         self.conv = nn.Sequential(
             nn.Conv2d(128, 128, 3, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.Softplus(),
+            nn.GroupNorm(64, 128),
+            # nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
             nn.Conv2d(128, 256, 3, padding=1, bias=False),
-            nn.BatchNorm2d(256),
+            # nn.BatchNorm2d(256),
+            nn.GroupNorm(128, 256)
         )        
         self.down = nn.Conv2d(256, 256, kernel_size=2, stride=2, padding=0, bias=False)
         self.regress = nn.Linear(4096, latent_dims * vector_dims)
@@ -121,7 +123,8 @@ class Upsample(nn.Module):
         super(Upsample, self).__init__()
         self.block = nn.Sequential(
             nn.ConvTranspose2d(in_ch, out_ch, kernel_size=kernel_size, stride=stride, padding=padding),
-            nn.BatchNorm2d(out_ch),
+            # nn.BatchNorm2d(out_ch),
+            nn.GroupNorm(out_ch // 2, out_ch),
             nn.ReLU()
         )
     
