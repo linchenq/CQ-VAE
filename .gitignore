@@ -1,8 +1,10 @@
 # generating folders
+
 ## log folder, saved tensorboard and text log
-logs
-saves
-outputs
+logs_*
+
+saves_*
+
 
 # pycache
 __pycache__
@@ -10,12 +12,16 @@ __pycache__
 # spyder project initial
 .spyproject
 
-# custom dataset
-
 # privacy
+
 # dataset/utils4data/cfgs.py
+
 dataset/source/AUGM*
+
 dataset/data/*
 
 # ignored old versions
+
 # old
+
+pretrain_weights
