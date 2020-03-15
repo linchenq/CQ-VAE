@@ -12,10 +12,10 @@ TRAIN = ['Arntzen', 'Askew', 'Athanas', 'Ausman', 'Ballentine', 'Barrera',
          'Sheldon', 'Shupack', 'Sievert', 'Spear', 'Spruell', 'Stacy',
          'Swint', 'Symonds', 'Talwar', 'Tolle', 'Triggs', 'Wake', 'Weien']
 
-TEST = ['Allison', 'Baker', 'Budd', 'Derr', 'Epp', 'Etezadi', 'Federle',
+TEST = ['Allison', 'Baker', 'Budd', 'Derr', 'Epp', 'Etezadi',
         'Fortune', 'Gamse', 'Garza', 'Kastensmidt', 'Keleher', 'Lacy', 'Stewart', 
-        'Oliver', 'Roth', 'Ryan', 'Schild', 'Shidle', 'Turner']
+        'Oliver', 'Roth', 'Ryan', 'Schild', 'Turner']
 
 # Stewart data lost, then removed from TEST SET
 
-# Federle data incorrect, then removed from TEST SET 'Federle'
+# Federle & Shidle data incorrect, then removed from TEST SET 'Federle'

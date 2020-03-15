@@ -28,11 +28,6 @@ C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Etezadi_
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Etezadi_5_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Etezadi_7_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Etezadi_9_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Federle_1_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Federle_3_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Federle_5_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Federle_7_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Federle_9_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Fortune_1_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Fortune_3_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Fortune_5_combined.mat
@@ -83,11 +78,6 @@ C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Schild_3
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Schild_5_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Schild_7_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Schild_9_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Shidle_1_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Shidle_3_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Shidle_5_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Shidle_7_combined.mat
-C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Shidle_9_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Stewart_1_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Stewart_3_combined.mat
 C:\Research\LumbarSpine\Github\generative-model-robustness\dataset\data\Stewart_5_combined.mat

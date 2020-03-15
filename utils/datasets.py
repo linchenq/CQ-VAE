@@ -20,11 +20,26 @@ class SpineDataset:
         best_mask = uts.poly2mask(img.shape[0], img.shape[1], best + 64)
         
         return img, disks, best, best_mask
-
+    
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     ds = SpineDataset(r'../dataset/train.txt')
+    # max_size = len(ds)
+    # for i, (img, pts, best, best_mask, cur_pth) in enumerate(ds):
+    #     print(i)
+    #     if i >= max_size + 1:
+    #         break
+        
+    #     fig, ax = plt.subplots()
+    #     title = cur_pth.split('\\')[-1]
+    #     fig.suptitle(f"{title}")
+    #     ax.imshow(img, cmap='gray')
+        
+    #     for pt in pts:
+    #         ax.plot(pt[:, 0] + 64, pt[:, 1] + 64, 'g-')
+            
+            
     for i, (img, pts, best, best_mask) in enumerate(ds):
         fig, ax = plt.subplots()
         ax.imshow(img, cmap='gray')
@@ -41,4 +56,5 @@ if __name__ == '__main__':
             
             mask = uts.poly2mask(img.shape[0], img.shape[1], pt + 64)
             ax1.imshow(mask, cmap='gray', alpha=0.5)
-        break  
+        
+        break
