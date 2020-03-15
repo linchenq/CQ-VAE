@@ -40,7 +40,7 @@ class Evaluator(object):
     def update_seed(self, random_seed):
         self.random_seed = random_seed
     
-    def eval_valid(self, epoch, model, data, device):
+    def eval_valid(self, epoch, model, data, real_sample, device):
         model.eval()
         
         model_loss = 0
@@ -57,12 +57,12 @@ class Evaluator(object):
             with torch.no_grad():
                 zs, decs, qy, logits, best = model(x, step=None)
                 pts, masks = uts.batch_linear_combination(cfg=self.cfg,
-                                                          target=zs.shape[1] // 2, 
+                                                          target=real_sample, 
                                                           x_shape=x.shape[2:],
                                                           meshes=meshes,
                                                           random_seed=self.random_seed,
                                                           device=device)
-    
+
                 loss, loss_dict = self.loss.forward(zs, decs, qy, logits, best,
                                                     pts, masks,
                                                     best_mesh, best_mask,
@@ -70,6 +70,7 @@ class Evaluator(object):
                 
                 model_loss += loss.item() * x.shape[0]
                 model_data += x.shape[0]
+                
                 if model_dict is None:
                     model_dict = loss_dict
                 else:

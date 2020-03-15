@@ -46,6 +46,10 @@ class DiscreteLoss(nn.Module):
         ret = self.gamma * (best_reg + best_auto + self.alpha * best_seg) +\
                 (reg + auto + self.alpha * seg) + \
                 self.beta * kld
+                
+        # ret = self.gamma * (best_reg + self.alpha * best_seg) +\
+        #         (reg + self.alpha * seg) + \
+        #         self.beta * kld
         
         ret_dict = {
             "total_loss": ret.item(),

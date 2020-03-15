@@ -89,6 +89,7 @@ class DiscreteVAE(nn.Module):
         enc = self.encoder(x)
         enc = enc.view(-1, 8192)
         enc = self.discrete(enc)
+        enc = self.sigmoid(enc) 
         
         logits = enc.view(-1, self.latent_dims, self.vector_dims)
         qy = self.softmax(logits)
