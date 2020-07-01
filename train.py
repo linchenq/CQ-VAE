@@ -131,7 +131,7 @@ class Trainer(object):
             # Update random seed, ensure dataset are selected periodically similiar
             # Update tau to let it go smaller
             if batch_i % batch_step_tau == 0:
-                model.tau = np.maximum(model.tau * np.exp(-3e-3 * batch_i),
+                model.tau = np.maximum(model.tau * np.exp(-3e-5 * batch_i),
                                         self.args.min_tau)
                 self.evaluator.log("info", f"E{epoch}B{batch_i}is : {model.tau}")
                 
@@ -166,19 +166,19 @@ class Trainer(object):
 if __name__ == '__main__':
         
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", type=int, default=2)
-    parser.add_argument("--lr", type=float, default=1e-2)
-    parser.add_argument("--epoch", type=int, default=51)
+    parser.add_argument("--batch_size", type=int, default=10)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--epoch", type=int, default=101)
     
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--task_name", type=str, default="db0")
     
-    parser.add_argument("--num_sample", type=int, default=32)
-    parser.add_argument("--real_sample", type=int, default=8)
-    parser.add_argument("--batch_step_tau", type=int, default=2)
+    parser.add_argument("--num_sample", type=int, default=256)
+    parser.add_argument("--real_sample", type=int, default=64)
+    parser.add_argument("--batch_step_tau", type=int, default=5)
     
     parser.add_argument("--tau", type=int, default=5)
-    parser.add_argument("--min_tau", type=float, default=2)
+    parser.add_argument("--min_tau", type=float, default=0.5)
     
     parser.add_argument("--eval_step", type=int, default=10)
     parser.add_argument("--save_step", type=int, default=10)
