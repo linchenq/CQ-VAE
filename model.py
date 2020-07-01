@@ -2,24 +2,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils.ops import DiscreteEncoder, DiscreteDecoder, RegressAutoEncoder
-from utils.loss import DiscreteLoss
+from utils.ops import DiscreteEncoder, ShapeDist, BackLoopEnc, ShapeEst
+from utils.loss import CQLoss
 
 '''
-I -> Encoder -> P(Z) -gumbel-softmax sample-> z(one-hot) -> decoder -> segmentation mask
-                 |                                              |
-                 v                                           ^  -----------> regression points
-                 z_mean                                      |                   |
-                                                               <---- enc <------
+I -> Encoder -> P(Z) -gumbel-softmax sample-> z(one-hot) -> decoder -> regression points
+                 |                                           ^                |
+                 v                                           | <--- enc <----
+                 z_mean -> seperated_decoder -> shape estimation
 '''
 
-class DiscreteVAE(nn.Module):
+class CQVAE(nn.Module):
     ''' Encoder Structure: ResEncoder -> flatten -> discrete distribution -> logits
                                                                               | softmax
                                                                              qy
         
-        # ResEncoder: (batch_size, 1, 64, 128) -> (batch_size, 512, 2, 4)
-        # Discrete: (batch_size, 512 * 2 * 4) -> (batch_size, lat_dims * vec_dims)
+        # ResEncoder: (batch_size, 1, 128, 128) -> (batch_size, 512, 4, 4)
+        # Discrete: (batch_size, 512 * 4 * 4) -> (batch_size, lat_dims * vec_dims)
         
     '''
         
@@ -32,8 +31,6 @@ class DiscreteVAE(nn.Module):
     '''
     def __init__(self, in_channels=1,
                        out_channels=176*2,
-                       seg_channels=1,
-                       
                        latent_dims=64,
                        vector_dims=11,
                        
@@ -44,31 +41,25 @@ class DiscreteVAE(nn.Module):
                        tau=1.,
                        device=None,
                        
-                       sample_step=128
-                ):
+                       num_sample=128):
         
-        super(DiscreteVAE, self).__init__()
+        super(CQVAE, self).__init__()
         
         self.latent_dims = latent_dims
         self.vector_dims = vector_dims
-        
-        self.alpha = alpha
-        self.beta = beta
-        self.gamma = gamma
-        
+        self.alpha, self.beta, self.gamma = alpha, beta, gamma
         self.tau = tau
         self.device = device
+        self.num_sample = num_sample
         
-        self.sample_step = sample_step
-        
+        # model
         self.encoder = DiscreteEncoder(in_ch=in_channels)
-        self.discrete = nn.Linear(8192, latent_dims * vector_dims)
-        
-        self.decoder = DiscreteDecoder(in_ch=latent_dims * vector_dims, out_ch=out_channels, seg_ch=seg_channels)
-        self.autoencoder = RegressAutoEncoder(in_ch=out_channels, latent_dims=latent_dims, vector_dims=vector_dims)
+        self.discrete = nn.Linear(512*4*4, latent_dims * vector_dims)
+        self.dist = ShapeDist(out_ch=out_channels, lat_dim=latent_dims, vec_dim=vector_dims)
+        self.est = ShapeEst(out_ch=out_channels, lat_dim=latent_dims, vec_dim=vector_dims)
+        self.backloop = BackLoopEnc(in_ch=out_channels, lat_dim=latent_dims, vec_dim=vector_dims)
         
         self.softmax = nn.Softmax(dim=-1)
-        self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
     
     def gumbel_sample(self, shape, eps=1e-20):
@@ -87,91 +78,78 @@ class DiscreteVAE(nn.Module):
     
     def encode(self, x):
         enc = self.encoder(x)
-        enc = enc.view(-1, 8192)
-        enc = self.discrete(enc)
-        enc = self.sigmoid(enc) 
-        
-        logits = enc.view(-1, self.latent_dims, self.vector_dims)
+        enc = enc.view(-1, 512*4*4)
+        z = self.discrete(enc)
+        z = self.sigmoid(z)
+                
+        logits = z.view(-1, self.latent_dims, self.vector_dims)
         qy = self.softmax(logits)
         
         return logits, qy
-
-    def decode(self, x):
-        x = x.view(-1, self.latent_dims * self.vector_dims)
-        reg, seg = self.decoder(x)
-        rz = self.autoencoder(reg)
-        reg = reg.view(-1, 176, 2)
-        
-        return reg, seg, rz
     
-    def forward(self, x, step=None):
+    def shape_dist(self, x):
+        # x = x.view(-1, self.latent_dims * self.vector_dims)
+        pt = self.dist(x)
+        rz = self.backloop(pt)
+        pt = pt.view(-1, 176, 2)
+        
+        return pt, rz
+    
+    def shape_est(self, x):
+        x = x.view(-1, self.latent_dims * self.vector_dims)
+        best_pt = self.est(x)
+        best_pt = best_pt.view(-1, 176, 2)
+        
+        return best_pt
+    
+    def forward(self, x):
         '''
             zs: list of z, sampled z from P(Z)
-            decs: list of tuple(pts, mask, rz), regarding loss
+            decs: list of tuple(pts, rz), regarding loss
         '''
-        zs, regs, segs, rzs = [], [], [], []
+        zs, pts, rzs = [], [], []
         logits, qy = self.encode(x)
-        
-        if step is None:
-            step = self.sample_step
-        
+                
         '''
         SAMPLING METHOD:
-            [1] x: drop with prob rate; gt: generate matched lr ground truth with the same amount
-            [2] x: generate fixed number of x; gt: generate half amount of gt
+            [NO]  [1] x: drop with prob rate; gt: generate matched lr ground truth with the same amount
+            [YES] [2] x: generate fixed number of x; gt: generate half amount of gt
         '''
-        
-        '''
-        # # [1] SAMPLING METHOD
-        # for i in range(step):
-        #     if torch.rand(1) > 0.5:
-        #         z = self.reparametrize(logits)
-        #         reg, seg, rz = self.decode(z)
-        #         zs, regs, segs, rzs = zs + [z], regs + [reg], segs + [seg], rzs + [rz]
-        '''
-        
-        # [2] SAMPLING METHOD
-        for i in range(step):
+        for i in range(self.num_sample):
             z = self.reparametrize(logits)
-            reg, seg, rz = self.decode(z)
-            zs, regs, segs, rzs = zs + [z], regs + [reg], segs + [seg], rzs + [rz]
+            pt, rz = self.shape_dist(z)
+            zs, pts, rzs = zs + [z], pts + [pt], rzs + [rz]
         
         zs, rzs = torch.stack(zs, dim=0).permute(1, 0, 2, 3), torch.stack(rzs, dim=0).permute(1, 0, 2, 3)
-        regs= torch.stack(regs, dim=0).permute(1, 0, 2, 3)
-        segs = torch.stack(segs, dim=0).permute(1, 0, 2, 3, 4).squeeze(dim=2)
-        decs = (regs, segs, rzs)
-        
-        best_reg, best_seg, best_rz = self.decode(logits)
-        best_seg = best_seg.squeeze(dim=1)
-        best = (best_reg, best_seg, best_rz)
+        pts = torch.stack(pts, dim=0).permute(1, 0, 2, 3)
+        decs = (pts, rzs)
+        best = self.shape_est(logits)
         
         return zs, decs, qy, logits, best
 
 
 if __name__ == '__main__':
     debug, summary = True, False
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    model = DiscreteVAE(in_channels=1,
-                        out_channels=176*2,
-                        seg_channels=1,
+    model = CQVAE(in_channels=1,
+                  out_channels=176*2,
+                  latent_dims=64,
+                  vector_dims=11,
                         
-                        latent_dims=64,
-                        vector_dims=11,
+                  alpha=1.,
+                  beta=1.,
+                  gamma=1.,
                         
-                        alpha=1.,
-                        beta=1.,
-                        gamma=1.,
-                        
-                        tau=3.,
-                        device=device,
-                        sample_step=512)
+                  tau=5.,
+                  device=device,
+                  num_sample=32)
     
     model = model.to(device)
-    model_loss = DiscreteLoss(alpha=model.alpha,
-                              beta=model.beta,
-                              gamma=model.gamma,
-                              device=device)
+    model_loss = CQLoss(alpha=model.alpha,
+                        beta=model.beta,
+                        gamma=model.gamma,
+                        device=device)
     
     if summary:
         from torchsummary import summary
@@ -181,6 +159,6 @@ if __name__ == '__main__':
         from torch.autograd import Variable
         img = Variable(torch.rand(2, 1, 128, 128)).to(device)
         zs, decs, qy, logits, best = model(img)
-        pts, masks, zrs = decs
-        print(f"tensor shape: {pts.shape}, {masks.shape}, {zrs.shape}, {zs.shape}")
+        pts, zrs = decs
+        print(f"tensor shape: {pts.shape}, {best.shape}, {zrs.shape}, {zs.shape}")
         

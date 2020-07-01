@@ -2,26 +2,21 @@
 
 ## log folder, saved tensorboard and text log
 logs_*
-
 saves_*
 
 
-# pycache
+## pycache
 __pycache__
 
-# spyder project initial
+## spyder project initial
 .spyproject
 
-# privacy
-
-# dataset/utils4data/cfgs.py
-
+## privacy
 dataset/source/AUGM*
-
 dataset/data/*
 
-# ignored old versions
+## ignored old versions
 
-# old
+## others
+sftp
 
-pretrain_weights

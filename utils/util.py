@@ -17,7 +17,7 @@ INDEX:
 def poly2mask(height, width, poly):
     return np.transpose(polygon2mask((height, width), poly)).astype(int)
 
-def linear_combination(cfg, target, x_shape, meshes, random_seed, device):
+def linear_combination(cfg, target, meshes, random_seed):
     '''
     meshes: w/o batch dims
     '''
@@ -31,25 +31,24 @@ def linear_combination(cfg, target, x_shape, meshes, random_seed, device):
         pt = torch.stack(gen_pt, dim=0).sum(dim=0)
         pts.append(pt)
         
-        mask = poly2mask(x_shape[0], x_shape[1], (pt+64).cpu().numpy())
-        mask = torch.from_numpy(mask).to(device)
-        masks.append(mask)
+        # mask = poly2mask(x_shape[0], x_shape[1], (pt+64).cpu().numpy())
+        # mask = torch.from_numpy(mask).to(device)
+        # masks.append(mask)
         
-    return torch.stack(pts, dim=0), torch.stack(masks, dim=0).float()
+    return torch.stack(pts, dim=0)
 
-def batch_linear_combination(cfg, target, x_shape, meshes, random_seed, device):
+def batch_linear_combination(cfg, target, meshes, random_seed):
     '''
     cfg: permutation based on step size, saved as .npy
     target: length of generated pts, the target size to generate
     meshes: (batch, len, pts.shape[0], pts.shape[1])
     '''
-    pts, masks = [], []
+    pts = []
     for batch in meshes:
-        pt, mask = linear_combination(cfg, target, x_shape, batch, random_seed, device)
+        pt = linear_combination(cfg, target, batch, random_seed)
         pts.append(pt)
-        masks.append(mask)
         
-    return torch.stack(pts, dim=0), torch.stack(masks, dim=0)
+    return torch.stack(pts, dim=0)
 
 def match_shape(pred, data):
     '''

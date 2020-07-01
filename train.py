@@ -6,11 +6,11 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-
+    
 import utils.util as uts
-from model import DiscreteVAE
+from model import CQVAE
 from evals.evaluates import Evaluator
-from utils.loss import DiscreteLoss
+from utils.loss import CQLoss
 from utils.datasets import SpineDataset
 from utils.logger import Logger
     
@@ -39,7 +39,7 @@ class Trainer(object):
         self.model.to(self.device)
         self.optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()),
                                     lr=self.args.lr)
-        self.loss = DiscreteLoss(alpha=model.alpha, beta=model.beta, gamma=model.gamma, device=self.device, eps=1e-20)
+        self.loss = CQLoss(alpha=model.alpha, beta=model.beta, gamma=model.gamma, device=self.device, eps=1e-20)
         
         # random seed
         self.random_seed = 0
@@ -98,61 +98,55 @@ class Trainer(object):
             self.run_single_step(epoch)
     
     def run_single_step(self, epoch):           
-            
         self.model.train()
         
-        epoch_loss = 0
-        epoch_data = 0
-        epoch_dict = None
-        
-        # batch_step_tau
+        # initial metrics for training and evaluating
         batch_step_tau = len(self.dataloader['train']) // self.args.batch_step_tau
         
-        for batch_i, (x, meshes, best_mesh, best_mask) in tqdm.tqdm(enumerate(self.dataloader['train'])):
+        e_loss, e_size, e_dict = 0, 0, None
+        
+        for batch_i, (x, meshes, best_mesh) in tqdm.tqdm(enumerate(self.dataloader['train'])):
             x = torch.unsqueeze(x, dim=1)
-            x = x.float().to(self.device)
+            x, best_mesh = x.float().to(self.device), best_mesh.float().to(self.device)
             meshes = [mesh.float().to(self.device) for mesh in meshes]
-            best_mesh, best_mask = best_mesh.float().to(self.device), best_mask.float().to(self.device)
-                
+            
             self.optimizer.zero_grad()
-                        
-            zs, decs, qy, logits, best = self.model(x, step=None)
-            pts, masks = uts.batch_linear_combination(cfg="cfgs/cfgs_table.npy",
-                                                      target=self.args.real_sample, 
-                                                      x_shape=x.shape[2:],
-                                                      meshes=meshes,
-                                                      random_seed=self.random_seed,
-                                                      device=self.device)
-
+            
+            # zs, decs, best are generated from model, called sampling ones
+            zs, decs, qy, logits, best = self.model(x)
+            
+            # pts, masks are linear combination of ground truth samples
+            # The number of generated ground truth samples is self.args.real_sample
+            # Please ensure self.args.real_sample <= self.num_sample
+            pts = uts.batch_linear_combination(cfg="cfgs/cfgs_table.npy",
+                                               target=self.args.real_sample, 
+                                               meshes=meshes,
+                                               random_seed=self.random_seed)
             loss, loss_dict = self.loss.forward(zs, decs, qy, logits, best,
-                                                pts, masks,
-                                                best_mesh, best_mask,
-                                                self.model.vector_dims)
+                                                pts, best_mesh, self.model.vector_dims)
             loss.backward()
             
             self.optimizer.step()
             
-            # optimize on tau
+            # Update random seed, ensure dataset are selected periodically similiar
+            # Update tau to let it go smaller
             if batch_i % batch_step_tau == 0:
-                model.tau = np.maximum(model.tau * np.exp(-3e-5 * batch_i),
+                model.tau = np.maximum(model.tau * np.exp(-3e-3 * batch_i),
                                         self.args.min_tau)
                 self.evaluator.log("info", f"E{epoch}B{batch_i}is : {model.tau}")
-            
-            # optimize on random seed
-            if batch_i % batch_step_tau == 0:
+                
                 self.random_seed += 1
                 self.evaluator.update_seed(self.random_seed)
             
             # evaluation
-            epoch_loss += loss.item() * x.shape[0]
-            epoch_data += x.shape[0]
-            
-            if epoch_dict is None:
-                epoch_dict = loss_dict
+            e_loss += loss.item() * x.shape[0]
+            e_size += x.shape[0]
+            if e_dict is None:
+                e_dict = loss_dict
             else:
-                epoch_dict = uts.dict_add(epoch_dict, loss_dict)
-
-        self.evaluator.eval_model(epoch, epoch_loss, epoch_dict, epoch_data, "train")
+                e_dict = uts.dict_add(e_dict, loss_dict)
+        
+        self.evaluator.eval_model(epoch, "train", e_loss, e_dict, e_size)
 
         if epoch % self.args.eval_step == 0:
             self.model.eval()
@@ -172,22 +166,22 @@ class Trainer(object):
 if __name__ == '__main__':
         
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=101)
+    parser.add_argument("--batch_size", type=int, default=2)
+    parser.add_argument("--lr", type=float, default=1e-2)
+    parser.add_argument("--epoch", type=int, default=51)
     
     parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--task_name", type=str, default="debug")
+    parser.add_argument("--task_name", type=str, default="db0")
     
-    parser.add_argument("--sample_step", type=int, default=64)
+    parser.add_argument("--num_sample", type=int, default=32)
     parser.add_argument("--real_sample", type=int, default=8)
-    parser.add_argument("--batch_step_tau", type=int, default=5)
+    parser.add_argument("--batch_step_tau", type=int, default=2)
     
     parser.add_argument("--tau", type=int, default=5)
-    parser.add_argument("--min_tau", type=float, default=0.5)
+    parser.add_argument("--min_tau", type=float, default=2)
     
-    parser.add_argument("--eval_step", type=int, default=5)
-    parser.add_argument("--save_step", type=int, default=5)
+    parser.add_argument("--eval_step", type=int, default=10)
+    parser.add_argument("--save_step", type=int, default=10)
     
     parser.add_argument("--log_pth", type=str, default="./logs/")
     parser.add_argument("--sav_pth", type=str, default="./saves/")
@@ -202,11 +196,18 @@ if __name__ == '__main__':
     for param in ['train', 'valid']:
         dataset[param] = SpineDataset(f"dataset/{param}.txt")
 
-    model = DiscreteVAE(in_channels=1, out_channels=176*2, seg_channels=1,
-                        latent_dims=64, vector_dims=11, 
-                        alpha=1., beta=1., tau=args.tau, 
-                        device=args.device,
-                        sample_step=args.sample_step)
+    model = CQVAE(in_channels=1,
+                  out_channels=176*2,
+                  latent_dims=64,
+                  vector_dims=11,
+                        
+                  alpha=1.,
+                  beta=1.,
+                  gamma=1.,
+                        
+                  tau=args.tau,
+                  device=args.device,
+                  num_sample=args.num_sample)
     
     trainer = Trainer(args, dataset, model)
     trainer.train()

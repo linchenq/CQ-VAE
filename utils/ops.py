@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from torchvision import models
 
@@ -7,16 +8,16 @@ class DiscreteEncoder(nn.Module):
         self.resnet = models.resnet34(pretrained=False)
         self.enc0 = nn.Sequential(
             nn.Conv2d(in_ch, 64, kernel_size=7, stride=2, padding=3, bias=False),
-            nn.BatchNorm2d(64),
+            nn.GroupNorm(32, 64),
             nn.ReLU(inplace=True)
         )
         self.downsample = nn.Conv2d(64, 64, kernel_size=2, stride=2, padding=0, bias=False)
         
         self.enc1 = self.resnet.layer1
         self.enc2 = self.resnet.layer2
-        self.enc3 = self.resnet.layer3
+        self.enc3 = self.resnet.layer3 
         self.enc4 = self.resnet.layer4
-        
+            
     def forward(self, x):
         out = self.downsample(self.enc0(x))
         out = self.enc1(out)
@@ -26,107 +27,116 @@ class DiscreteEncoder(nn.Module):
         
         return out
 
-class DiscreteDecoder(nn.Module):
-    def __init__(self, in_ch, out_ch, seg_ch):
-        super(DiscreteDecoder, self).__init__()
-        self.recon = nn.Linear(in_ch, 8192)
+
+# Problistic Path for Shape Distribution
+class ShapeDist(nn.Module):
+    def __init__(self, out_ch, lat_dim=64, vec_dim=11):
+        super(ShapeDist, self).__init__()
+        C = torch.linspace(-1, 1, vec_dim).view(1, 1, vec_dim)
+        self.register_buffer('C', C)
         
-        # 512, 4, 4 -> 256, 8, 8 -> 128, 16, 16
-        planes = []
-        for ch in [256, 128]:
-            planes.append(Upsample(ch*2, ch, 2, 2, 0))
-        self.upsample = nn.Sequential(*planes)
-        
-        self.regress = RegressDecoder(32768, out_ch)
-        self.segment = SegmentDecoder(seg_ch)
-        
-    def forward(self, x):
-        rec = self.recon(x)
-        rec = rec.view(-1, 512, 4, 4)
-        upsample = self.upsample(rec)
-        
-        # segmentation
-        seg_out = self.segment(upsample)
+        # upsampling
+        planes = [UpsDist(lat_dim, 128, 1, 5, 1, 0)]
+        for ch in [64, 32, 16]:
+            planes.append(UpsDist(ch*2, ch, ch, 5, 2, 2, 1))
+        self.ups = nn.Sequential(*planes)
         
         # regression
-        reg_up = upsample.view(-1, 32768)
-        reg_out = self.regress(reg_up)
+        self.fcs = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(16*40*40, 6400),
+            nn.ReLU(inplace=True),
+            nn.Linear(6400, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, out_ch)
+        )        
+        
+    def forward(self, x):
+        z = torch.sum(x * self.C, dim=2)
+        z = z.view(z.size(0), -1, 1, 1)
+        
+        dec = self.ups(z)
+        dec = self.fcs(dec)
+        
+        return dec
 
-        return reg_out, seg_out
 
-class RegressDecoder(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super(RegressDecoder, self).__init__()
+# Backward encoder looped with **ShapeDist**
+class BackLoopEnc(nn.Module):
+    def __init__(self, in_ch, lat_dim=64, vec_dim=11):
+        super(BackLoopEnc, self).__init__()
+        self.lat_dim, self.vec_dim = lat_dim, vec_dim
         
         self.fcs = nn.Sequential(
-            nn.Linear(in_ch, 8192),
+            nn.Linear(in_ch, 1024),
+            nn.Softplus()
+        )
+        self.down = nn.Sequential(
+            nn.Conv2d(1, 64, 5, 2, 2),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(64, 128, 5, 2, 2, bias=False),
+            nn.GroupNorm(128, 128),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(128, 256, 5, 1, 0, bias=False),
+            nn.GroupNorm(1, 256),
+            nn.LeakyReLU(inplace=True),
+            nn.Flatten(),
+            nn.Linear(256*4*4, lat_dim*vec_dim)
+        )
+    
+    def forward(self, x):
+        uped = self.fcs(x)
+        uped = uped.view(-1, 1, 32, 32)
+        
+        out = self.down(uped)
+        out = out.view(-1, self.lat_dim, self.vec_dim)
+        
+        return out
+ 
+    
+# Determinstic Path for Shape Estimation
+class ShapeEst(nn.Module):
+    def __init__(self, out_ch, lat_dim=64, vec_dim=11):
+        super(ShapeEst, self).__init__()
+        self.equaldist = nn.Sequential(
+            nn.Linear(lat_dim*vec_dim, lat_dim*vec_dim),
             nn.ReLU(inplace=True),
-            nn.Linear(8192, 1024),
+        )
+        
+        # upsampling
+        planes = [UpsDist(lat_dim*vec_dim, 128, 1, 5, 1, 0)]
+        for ch in [64, 32]:
+            planes.append(UpsDist(ch*2, ch, ch, 5, 2, 2, 1))
+        self.ups = nn.Sequential(*planes)
+        
+        # regression
+        self.fcs = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(32*20*20, 1024),
             nn.ReLU(inplace=True),
             nn.Linear(1024, out_ch)
         )
         
     def forward(self, x):
-        return self.fcs(x)
+        z = self.equaldist(x)
+        z = z.view(z.size(0), -1, 1, 1)
         
-class SegmentDecoder(nn.Module):
-    def __init__(self, out_ch):
-        super(SegmentDecoder, self).__init__()
+        dec = self.ups(z)
+        dec = self.fcs(dec)
         
-        self.planes = []
-        for ch in [64, 32, 16]:
-            self.planes.append(Upsample(ch*2, ch, 2, 2, 0))
-        self.ups = nn.Sequential(*self.planes)
-        
-        self.conv = nn.Conv2d(in_channels=16, out_channels=out_ch, kernel_size=1)
-        
-    def forward(self, x):
-        up = self.ups(x)
-        out = self.conv(up)
-        return out
+        return dec
 
-class RegressAutoEncoder(nn.Module):
-    def __init__(self, in_ch, latent_dims, vector_dims):
-        super(RegressAutoEncoder, self).__init__()
-        self.latent_dims, self.vector_dims = latent_dims, vector_dims
-        
-        self.fcs = nn.Sequential(
-            nn.Linear(in_ch, 1024),
-            nn.Softplus(),
-            nn.Linear(1024, 8192)
-        )
-        self.conv = nn.Sequential(
-            nn.Conv2d(128, 128, 3, padding=1, bias=False),
-            nn.GroupNorm(64, 128),
-            # nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, 256, 3, padding=1, bias=False),
-            # nn.BatchNorm2d(256),
-            nn.GroupNorm(128, 256)
-        )        
-        self.down = nn.Conv2d(256, 256, kernel_size=2, stride=2, padding=0, bias=False)
-        self.regress = nn.Linear(4096, latent_dims * vector_dims)
-    
-    def forward(self, x):
-        uped = self.fcs(x)
-        uped = uped.view(-1, 128, 8, 8)
-        
-        out = self.down(self.conv(uped))
-        out = out.view(-1, 4096)
-        out = self.regress(out)
-        out = out.view(-1, self.latent_dims, self.vector_dims)
-        
-        return out    
 
-class Upsample(nn.Module):
-    def __init__(self, in_ch, out_ch, kernel_size=2, stride=2, padding=0):
-        super(Upsample, self).__init__()
+# Base Class for class **ShapeDist**
+class UpsDist(nn.Module):
+    def __init__(self, in_ch, out_ch, group_ch, kernel_size, stride, padding, out_padding=0):
+        super(UpsDist, self).__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose2d(in_ch, out_ch, kernel_size=kernel_size, stride=stride, padding=padding),
-            # nn.BatchNorm2d(out_ch),
-            nn.GroupNorm(out_ch // 2, out_ch),
-            nn.ReLU()
+            nn.ConvTranspose2d(in_ch, out_ch, kernel_size, stride, padding, out_padding, bias=False),
+            nn.GroupNorm(group_ch, out_ch),
+            nn.ReLU(inplace=True)
         )
-    
+        
     def forward(self, x):
         return self.block(x)
+    
