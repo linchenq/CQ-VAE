@@ -131,7 +131,7 @@ class Trainer(object):
             # Update random seed, ensure dataset are selected periodically similiar
             # Update tau to let it go smaller
             if batch_i % batch_step_tau == 0:
-                model.tau = np.maximum(model.tau * np.exp(-3e-5 * batch_i),
+                model.tau = np.maximum(model.tau * np.exp(-1e-4 * batch_i),
                                         self.args.min_tau)
                 self.evaluator.log("info", f"E{epoch}B{batch_i}is : {model.tau}")
                 
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     parser.add_argument("--task_name", type=str, default="db0")
     
     parser.add_argument("--num_sample", type=int, default=256)
-    parser.add_argument("--real_sample", type=int, default=64)
+    parser.add_argument("--real_sample", type=int, default=256)
     parser.add_argument("--batch_step_tau", type=int, default=5)
     
     parser.add_argument("--tau", type=int, default=5)
