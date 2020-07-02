@@ -171,10 +171,10 @@ if __name__ == '__main__':
     parser.add_argument("--epoch", type=int, default=101)
     
     parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--task_name", type=str, default="db0")
+    parser.add_argument("--task_name", type=str, default="db")
     
-    parser.add_argument("--num_sample", type=int, default=64)
-    parser.add_argument("--real_sample", type=int, default=8)
+    parser.add_argument("--num_sample", type=int, default=256)
+    parser.add_argument("--real_sample", type=int, default=32)
     parser.add_argument("--batch_step_tau", type=int, default=5)
     
     parser.add_argument("--tau", type=int, default=5)

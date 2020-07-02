@@ -42,6 +42,7 @@ if __name__ == '__main__':
         import numpy as np
         for pt in pts:                
                 fig1, ax1 = plt.subplots()
+                ax1.imshow(img, cmap='gray')
                 ax1.plot(pt[:, 0]+64, pt[:, 1]+64, 'r-')
                 ax1.imshow(img, cmap='gray', alpha=0)
         if i>=3:
@@ -52,7 +53,7 @@ if __name__ == '__main__':
     #     fig, ax = plt.subplots()
     #     ax.imshow(img, cmap='gray')
     #     ax.plot(best[:, 0] + 64, best[:, 1] + 64, 'g-')
-    #     ax.scatter(best[[0,29,88,117], 0] + 64, best[[0,29,88,117], 1] + 64, marker = 'o', color = 'b')
+    #     # ax.scatter(best[[0,29,88,117], 0] + 64, best[[0,29,88,117], 1] + 64, marker = 'o', color = 'b')
         
     #     # ax.imshow(best_mask, cmap='gray', alpha=0.5)
         
