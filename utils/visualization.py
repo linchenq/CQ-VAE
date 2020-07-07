@@ -116,7 +116,7 @@ def heatboundary(image, points, best):
             ax.plot(cliped_best[:, 0], cliped_best[:, 1], 'k-')
             ax.imshow(image[x_min:x_max, y_min:y_max], extent=[x_min, x_max, y_min, y_max], origin='upper', aspect='equal', cmap='gray')
             
-def compare_gt_test(image, points, best, meshes):
+def compare_gt_test(image, points, best, meshes, var_plot=True):
     # for points, test set
     pt_vars, mean_pt_x, mean_pt_y = [], [], []
     for i in range(len(best)):
@@ -128,26 +128,30 @@ def compare_gt_test(image, points, best, meshes):
     index = np.argsort(pt_vars)
     index = index[::-1]
     
-    fig, ax = plt.subplots()
-    colormap = matplotlib.cm.jet(np.linspace(0, 1, 11))  
+    
     f_x, f_y, f_clr = [], [], []
     
-    for i in range(len(best)):
-        clr_idx = int(i*10/len(best))
-        f_x.append(mean_pt_x[index[i]])
-        f_y.append(mean_pt_y[index[i]])
-        f_clr.append(colormap[clr_idx])
-    pcm = ax.scatter(f_x, f_y, s=3, marker='o', color=f_clr, alpha=1)
-    fig.colorbar(pcm, ax=ax, boundaries=np.linspace(0, 1, 11))
-    # ax.plot(best[:, 0], best[:, 1], 'w-')
-    ax.imshow(image, cmap='gray', alpha=1)
+    if var_plot:
+        fig, ax = plt.subplots()
+        colormap = matplotlib.cm.jet(np.linspace(0, 1, 11))  
+        for i in range(len(best)):
+            clr_idx = int(i*10/len(best))
+            f_x.append(mean_pt_x[index[i]])
+            f_y.append(mean_pt_y[index[i]])
+            f_clr.append(colormap[clr_idx])
+        pcm = ax.scatter(f_x, f_y, s=3, marker='o', color=f_clr, alpha=1)
+        fig.colorbar(pcm, ax=ax, boundaries=np.linspace(0, 1, 11))
+        # ax.plot(best[:, 0], best[:, 1], 'w-')
+        ax.imshow(image, cmap='gray', alpha=1)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        
+        if False:
+            min_var_idx, mid_var_idx, max_var_idx = index[-1], index[len(best) // 2], index[0]
+            for idx in (min_var_idx, mid_var_idx, max_var_idx):
+                plot_points = np.vstack(pt[idx, :] for pt in points)
+                ax.plot(plot_points[:, 0], plot_points[:, 1])
     
-    if True:
-        min_var_idx, mid_var_idx, max_var_idx = index[-1], index[len(best) // 2], index[0]
-        for idx in (min_var_idx, mid_var_idx, max_var_idx):
-            plot_points = np.vstack(pt[idx, :] for pt in points)
-            ax.plot(plot_points[:, 0], plot_points[:, 1])
-
     # for meshes, ground truth
     pt1_vars, mean1_pt_x, mean1_pt_y = [], [], []
     for i in range(len(best)):
@@ -159,35 +163,39 @@ def compare_gt_test(image, points, best, meshes):
     index1 = np.argsort(pt1_vars)
     index1 = index1[::-1]
     
-    fig1, ax1 = plt.subplots()
-    colormap = matplotlib.cm.jet(np.linspace(0, 1, 11))  
-    f_x1, f_y1, f_clr1 = [], [], []
-    
-    for i in range(len(best)):
-        clr_idx = int(i*10/len(best))
-        f_x1.append(mean1_pt_x[index1[i]])
-        f_y1.append(mean1_pt_y[index1[i]])
-        f_clr1.append(colormap[clr_idx])
-    pcm = ax1.scatter(f_x1, f_y1, s=3, marker='o', color=f_clr1, alpha=1)
-    fig1.colorbar(pcm, ax=ax1, boundaries=np.linspace(0, 1, 11))
-    # ax1.plot(best[:, 0], best[:, 1], 'w-')
-    ax1.imshow(image, cmap='gray', alpha=1)
-    
-    if True:
-        min_var_idx, mid_var_idx, max_var_idx = index1[-1], index1[len(best) // 2], index1[0]
-        for idx in (min_var_idx, mid_var_idx, max_var_idx):
-            plot_points = np.vstack(pt[idx, :] for pt in meshes)
+    if var_plot:
+        fig1, ax1 = plt.subplots()
+        colormap = matplotlib.cm.jet(np.linspace(0, 1, 11))  
+        f_x1, f_y1, f_clr1 = [], [], []
+        
+        for i in range(len(best)):
+            clr_idx = int(i*10/len(best))
+            f_x1.append(mean1_pt_x[index1[i]])
+            f_y1.append(mean1_pt_y[index1[i]])
+            f_clr1.append(colormap[clr_idx])
+            
+        pcm = ax1.scatter(f_x1, f_y1, s=3, marker='o', color=f_clr1, alpha=1)
+        fig1.colorbar(pcm, ax=ax1, boundaries=np.linspace(0, 1, 11))
+        # ax1.plot(best[:, 0], best[:, 1], 'w-')
+        ax1.imshow(image, cmap='gray', alpha=1)
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+        
+        if False:
+            min_var_idx, mid_var_idx, max_var_idx = index1[-1], index1[len(best) // 2], index1[0]
+            for idx in (min_var_idx, mid_var_idx, max_var_idx):
+                plot_points = np.vstack(pt[idx, :] for pt in meshes)
             ax1.plot(plot_points[:, 0], plot_points[:, 1])
     
     # print variance comparision with details
     metrics = [['No.', 'GT', 'Test']]
     for j in range(len(pt_vars)):
         metrics.append([j, "%.2f" % pt1_vars[j], "%.2f" % pt_vars[j]])
-    print(AsciiTable(metrics).table)
+    # print(AsciiTable(metrics).table)
+    return AsciiTable(metrics).table, pt1_vars, pt_vars
     
 def relation_vis(probs, losses):
     import pandas as pd
     arr = np.array([probs, losses]).T
     df = pd.DataFrame(arr, columns=['probability', 'loss'])
     sns.jointplot("probability", "loss", data=df, kind='reg')
-    

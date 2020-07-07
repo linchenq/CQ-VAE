@@ -54,9 +54,43 @@ if __name__ == '__main__':
 
 # %%
 '''
+Generate shapes with random Z (only decoder part in need)
+'''
+def generate_random_Pz(batch_size, device, M=64, N=11):
+    mask = torch.arange(0, N, 1).expand(batch_size, M, N)
+    idx = torch.randint(0, N, (batch_size, M, 1)).expand(batch_size, M, N)
+    Pz = (mask==idx).to(torch.float32)
+    Pz=Pz.to(device)
+    return Pz
+
+def get_single_shape(model, device):
+    fig, ax = plt.subplots()
+    pz = generate_random_Pz(1, device)
+    xx, _ = model.shape_dist(pz)
+    xx = xx.squeeze().detach().cpu().numpy() + 64
+    ax.plot(xx[:, 0], xx[:, 1], 'b-')
+
+def get_random_shape(model, device):   
+    fig, ax = plt.subplots(4, 5)
+    for i in range(0, 4):
+        pz = generate_random_Pz(1, device)
+        for j in range(0, 5):
+            pz[0, i*10+j] = 0
+            pz[0, i*10+j, 5] = 1
+
+            xx, _ = model.shape_dist(pz)
+            xx = xx.squeeze().detach().cpu().numpy() + 64
+            
+            ax[i,j].plot(xx[:, 0], xx[:, 1], 'b-')
+            ax[i,j].axis('off')
+    
+get_random_shape(model, device)
+get_single_shape(model, device)
+
+# %%
+'''
 # Visualize the learning/evaluating phase with different ratios
 '''
-# TODO: Wait for result
 IDX = [1, 2, 4, 8, 16, 32, 64, 128]
 T_1, T_2, T_4, T_8, T_16, T_32, T_64, T_128 = [], [], [], [], [], [], [], []
 E_1, E_2, E_4, E_8, E_16, E_32, E_64, E_128 = [], [], [], [], [], [], [], []
@@ -326,26 +360,139 @@ def vari_compare(model, num, tau):
                 points.append(sample)
         
         # visualize
-        vis.compare_gt_test(image, points, best_mesh, gen_meshes)
+        out_table, _, _ = vis.compare_gt_test(image, points, best_mesh, gen_meshes)
+        with open(f"./var_gt_test/varvs_{batch_i}", "w") as fout:
+            print(out_table, file=fout)
         
-        break
 vari_compare(model, 100, 0.5)
 
 # %%
 '''
-Uncertainty (sum of logprob) and regression loss
+Uncertainty (sum of logprob) and regression loss of single disk : Please ignore that
 '''
-def relation_search(model, num, tau):    
+# def relation_search(model, num, tau):    
     
+#     for batch_i, (x, meshes, best_mesh) in enumerate(dataloader):
+#         # data prepared
+#         x = torch.unsqueeze(x, dim=1)
+#         x = x.float().to(device)
+        
+#         best_mesh = best_mesh.float().to(device)
+        
+#         # initial variables
+#         probs, losses = [], []
+#         image = torch.squeeze(x).cpu().numpy()
+        
+#         # testing phase
+#         model.eval()
+#         with torch.no_grad():
+#             logits, soften = get_logits(x, model)
+#             soften = soften.squeeze(dim=0)
+#             model.tau = tau
+            
+#             for i in range(num):
+#                 z = model.reparametrize(logits)
+#                 sample, _ = model.shape_dist(z)
+#                 loss = F.mse_loss(sample, best_mesh)
+                
+#                 index = torch.argmax(z, dim=-1).squeeze(dim=0)
+#                 logprob = torch.sum(torch.log(soften[range(len(index)), index]))
+                
+#                 probs.append(logprob.item())
+#                 losses.append(loss.item())
+#         # cov and corrcoef
+#         con_mat = np.array([probs, losses])
+#         print(np.cov(con_mat))
+#         print(np.corrcoef(con_mat))
+        
+#         # r, p value
+#         import scipy.stats as stats
+#         r, p = stats.pearsonr(probs, losses)
+#         print(f"r is {r} and p is {p}")
+    
+#         # visualization
+#         vis.relation_vis(probs, losses)
+        
+#         break
+
+# relation_search(model, 100, 0.5)
+
+# %%
+'''
+Uncertainty (sum of logprob) and regression loss of all disks
+'''
+# def relation_search_all(model, num, tau):    
+#     probs, losses = [], []
+#     for batch_i, (x, meshes, best_mesh) in enumerate(dataloader):
+#         # data prepared
+#         x = torch.unsqueeze(x, dim=1)
+#         x = x.float().to(device)
+        
+#         best_mesh = best_mesh.float().to(device)
+        
+#         # initial variables
+#         in_probs, in_losses = [], []
+#         image = torch.squeeze(x).cpu().numpy()
+        
+#         # testing phase
+#         model.eval()
+#         with torch.no_grad():
+#             logits, soften = get_logits(x, model)
+#             soften = soften.squeeze(dim=0)
+#             model.tau = tau
+            
+#             for i in range(num):
+#                 z = model.reparametrize(logits)
+#                 sample, _ = model.shape_dist(z)
+#                 loss = F.mse_loss(sample, best_mesh)
+                
+#                 index = torch.argmax(z, dim=-1).squeeze(dim=0)
+#                 logprob = torch.sum(torch.log(soften[range(len(index)), index]))
+                
+#                 in_probs.append(logprob.item())
+#                 in_losses.append(loss.item())
+#         probs.append(np.mean(in_probs))
+#         losses.append(np.mean(in_losses))
+#     # cov and corrcoef
+#     con_mat = np.array([probs, losses])
+#     print(np.cov(con_mat))
+#     print(np.corrcoef(con_mat))
+    
+#     # r, p value
+#     import scipy.stats as stats
+#     r, p = stats.pearsonr(probs, losses)
+#     print(f"r is {r} and p is {p}")
+
+#     # visualization
+#     vis.relation_vis(probs, losses)
+
+# relation_search(model, 100, 0.5)
+
+# %%
+'''
+Variance between ground truth and test among all disks
+'''
+def variance_compare_all(model, num, tau):    
+    gtv_all, testv_all = [], []
     for batch_i, (x, meshes, best_mesh) in enumerate(dataloader):
         # data prepared
         x = torch.unsqueeze(x, dim=1)
         x = x.float().to(device)
         
+        meshes = [mesh.float() for mesh in meshes]
+        gen_meshes = uts.batch_linear_combination(cfg="cfgs/cfgs_table.npy",
+                                                  target=32, 
+                                                  meshes=meshes,
+                                                  random_seed=0)
+        gen_meshes = torch.squeeze(gen_meshes, dim=0)
+        gen_meshes += 64
+        
         best_mesh = best_mesh.float().to(device)
+        best_mesh = torch.squeeze(best_mesh).cpu().numpy()
+        best_mesh += 64
         
         # initial variables
-        probs, losses = [], []
+        points = []
         image = torch.squeeze(x).cpu().numpy()
         
         # testing phase
@@ -358,26 +505,164 @@ def relation_search(model, num, tau):
             for i in range(num):
                 z = model.reparametrize(logits)
                 sample, _ = model.shape_dist(z)
-                loss = F.mse_loss(sample, best_mesh)
+                sample = torch.squeeze(sample).cpu().numpy() + 64
                 
-                index = torch.argmax(z, dim=-1).squeeze(dim=0)
-                logprob = torch.sum(torch.log(soften[range(len(index)), index]))
-                
-                probs.append(logprob.item())
-                losses.append(loss.item())
-        # cov and corrcoef
-        con_mat = np.array([probs, losses])
-        print(np.cov(con_mat))
-        print(np.corrcoef(con_mat))
+                points.append(sample)
         
-        # r, p value
-        import scipy.stats as stats
-        r, p = stats.pearsonr(probs, losses)
-        print(f"r is {r} and p is {p}")
+        # visualize
+        out_table, gt_vars, test_vars = vis.compare_gt_test(image, points, best_mesh, gen_meshes, var_plot=False)
+        gtv_all = gtv_all + gt_vars
+        testv_all = testv_all + test_vars
     
-        # visualization
-        vis.relation_vis(probs, losses)
-        
-        break
+    import pandas as pd
+    import seaborn as sns
+    arr = np.array([gtv_all, testv_all]).T
+    df = pd.DataFrame(arr, columns=['ground_truth', 'test'])
+    
+    g = sns.jointplot("ground_truth", "test", data=df, kind='kde', space=0, color='b')
+    # plt.axis('equal')
+    # g.ax_joint.set_aspect(1)
+    # g.ax_joint.set_xticks(np.arange(-200, 400, 100))
+    # g.ax_joint.set_yticks(np.arange(-200, 400, 100))
+    # g.ax_joint.set_xlim(-200, 400)
+    # g.ax_joint.set_ylim(-200, 400)
+    
+variance_compare_all(model, 100, 0.5)
 
-relation_search(model, 100, 0.5)
+# %%
+'''
+Entropy(Uncertainty) and regression loss or variance
+'''
+
+def sample_entropy(P, reduction='mean'):
+    #P: batch_size x M x N
+    P=torch.clamp(P, min=1e-8, max=1-1e-5)
+    E=torch.mean(torch.sum(-P*torch.log(P), dim=2),dim=1)
+    if reduction == 'mean':
+        E=E.mean()
+    return E
+
+def entropy_variance(model, num, tau):    
+    entros, losses, varis = [], [], []
+    
+    for batch_i, (x, meshes, best_mesh) in enumerate(dataloader):
+        # data prepared
+        x = torch.unsqueeze(x, dim=1)
+        x = x.float().to(device)
+        meshes = [mesh.float() for mesh in meshes]
+        best_mesh = best_mesh.float().to(device)
+        
+        # initial variables
+        
+        # testing phase
+        model.eval()
+        with torch.no_grad():
+            logits, soften = get_logits(x, model)
+            entros.append(sample_entropy(logits).item())
+            model.tau = tau
+            in_loss, in_varis, points = [], [], []
+            
+            for i in range(num):
+                z = model.reparametrize(logits)
+                sample, _ = model.shape_dist(z)
+                
+                # mean loss
+                tmp_loss = F.mse_loss(sample, best_mesh)
+                in_loss.append(tmp_loss.item())
+                
+                # mean variance
+                points.append(torch.squeeze(sample).cpu().numpy() + 64)
+            
+            for j in range(176):
+                cluster = np.vstack(pt[j, :] for pt in points)
+                in_varis.append(np.var(cluster))
+                
+        losses.append(np.mean(in_loss))
+        varis.append(np.mean(in_varis))
+    
+    import pandas as pd
+    import seaborn as sns
+    arr = np.array([entros, varis]).T
+    df = pd.DataFrame(arr, columns=['entropy', 'variance'])
+    
+    # cov and corrcoef
+    con_mat = np.array([entros, varis])
+    print(np.cov(con_mat))
+    print(np.corrcoef(con_mat))
+    
+    # r, p value
+    import scipy.stats as stats
+    r, p = stats.pearsonr(entros, varis)
+    print(f"r is {r} and p is {p}")
+    
+    g = sns.jointplot("entropy", "variance", data=df, kind='kde', space=0, color='b')
+    # plt.axis('equal')
+    # g.ax_joint.set_aspect(1)
+    # g.ax_joint.set_xticks(np.arange(-200, 400, 100))
+    # g.ax_joint.set_yticks(np.arange(-200, 400, 100))
+    # g.ax_joint.set_xlim(-200, 400)
+    # g.ax_joint.set_ylim(-200, 400)
+
+def entropy_loss(model, num, tau):    
+    entros, losses, varis = [], [], []
+    
+    for batch_i, (x, meshes, best_mesh) in enumerate(dataloader):
+        # data prepared
+        x = torch.unsqueeze(x, dim=1)
+        x = x.float().to(device)
+        meshes = [mesh.float() for mesh in meshes]
+        best_mesh = best_mesh.float().to(device)
+        
+        # initial variables
+        
+        # testing phase
+        model.eval()
+        with torch.no_grad():
+            logits, soften = get_logits(x, model)
+            entros.append(sample_entropy(logits).item())
+            model.tau = tau
+            in_loss, in_varis, points = [], [], []
+            
+            for i in range(num):
+                z = model.reparametrize(logits)
+                sample, _ = model.shape_dist(z)
+                
+                # mean loss
+                tmp_loss = F.mse_loss(sample, best_mesh)
+                in_loss.append(tmp_loss.item())
+                
+                # mean variance
+                points.append(torch.squeeze(sample).cpu().numpy() + 64)
+            
+            for j in range(176):
+                cluster = np.vstack(pt[j, :] for pt in points)
+                in_varis.append(np.var(cluster))
+                
+        losses.append(np.mean(in_loss))
+        varis.append(np.mean(in_varis))
+    
+    import pandas as pd
+    import seaborn as sns
+    arr = np.array([entros, losses]).T
+    df = pd.DataFrame(arr, columns=['entropy', 'loss'])
+    
+    # cov and corrcoef
+    con_mat = np.array([entros, losses])
+    print(np.cov(con_mat))
+    print(np.corrcoef(con_mat))
+    
+    # r, p value
+    import scipy.stats as stats
+    r, p = stats.pearsonr(entros, losses)
+    print(f"r is {r} and p is {p}")
+    
+    g = sns.jointplot("entropy", "loss", data=df, kind='kde', space=0, color='b')
+    # plt.axis('equal')
+    # g.ax_joint.set_aspect(1)
+    # g.ax_joint.set_xticks(np.arange(-200, 400, 100))
+    # g.ax_joint.set_yticks(np.arange(-200, 400, 100))
+    # g.ax_joint.set_xlim(-200, 400)
+    # g.ax_joint.set_ylim(-200, 400)
+    
+entropy_variance(model, 100, 0.5)
+entropy_loss(model, 100, 0.5)
