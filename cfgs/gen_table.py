@@ -32,6 +32,21 @@ if __name__ == '__main__':
     np.save("cfgs_table.npy", np.array(out))
     print(f"the whole length is {len(out)}")
     
+    '''
+    Trick: for generation, there only exists 00000....01 permuntation
+    '''
+    # gt_remain = 4
+    # gt_out = []
+    # for i in range(gt_remain):
+    #     gt_ret = [0 for j in range(gt_remain)]
+    #     gt_ret[i] = 1
+    #     gt_out.append(gt_ret)
+        
+    # np.save("gt_table.npy", np.array(gt_out))
+    # print(f"the whole length of gt is {len(gt_out)}")
+        
+        
+    
             
         
         

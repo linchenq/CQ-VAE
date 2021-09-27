@@ -1,22 +1,23 @@
 # generating folders
 
-## log folder, saved tensorboard and text log
-logs_*
-saves_*
-
-
 ## pycache
 __pycache__
 
 ## spyder project initial
 .spyproject
 
+## log folder, saved tensorboard and text log
+logs
+saves
+
 ## privacy
-dataset/source/AUGM*
+dataset/source/*
 dataset/data/*
 
 ## ignored old versions
+older_version
 
 ## others
-results
+dataset/utils4data/*
+dataset/*.txt
 

@@ -2,125 +2,75 @@ import random
 import numpy as np
 import torch
 
-from skimage.draw import polygon2mask
-from terminaltables import AsciiTable
 
-'''
-INDEX:
-    [1] poly2mask : convert boundary points to mask
-    [2] [batch_]linear_combination: return tensors of generated pts/masks, with (batch)
-    [3] [batch_]match_shape: TBD
-    [4] dict_add, dict_mul: rewrite add/mul operation for dictionary
-    [5] print_metrics: TBD
-    [6] summary_metrics: TBD
-'''
-def poly2mask(height, width, poly):
-    return np.transpose(polygon2mask((height, width), poly)).astype(int)
-
-def linear_combination(cfg, target, meshes, random_seed):
-    '''
-    meshes: w/o batch dims
-    '''
-    selection = np.load(cfg)
-    random.seed(random_seed)
-    indexes = random.sample(range(0, selection.shape[0]), target)
+# mapping generation
+def _matching_shapes(pred, data):
+    # pred: a set of shapes predicted from NN, viewed as tensor without batch (length, H, W)
+    # data: ground truth, viewed as (length, H, W)
+    # mapping: mapping from data(gt) to pred, i.e. mapping[n]->k <-> data[n]->pred[k]
     
-    pts, masks = [], []
-    for index in indexes:
-        gen_pt = [selection[index, i] * meshes[i] for i in range(len(meshes))]
-        pt = torch.stack(gen_pt, dim=0).sum(dim=0)
-        pts.append(pt)
-        
-        # mask = poly2mask(x_shape[0], x_shape[1], (pt+64).cpu().numpy())
-        # mask = torch.from_numpy(mask).to(device)
-        # masks.append(mask)
-        
-    return torch.stack(pts, dim=0)
-
-def batch_linear_combination(cfg, target, meshes, random_seed):
-    '''
-    cfg: permutation based on step size, saved as .npy
-    target: length of generated pts, the target size to generate
-    meshes: (batch, len, pts.shape[0], pts.shape[1])
-    '''
-    pts = []
-    for batch in meshes:
-        pt = linear_combination(cfg, target, batch, random_seed)
-        pts.append(pt)
-        
-    return torch.stack(pts, dim=0)
-
-def match_shape(pred, data):
-    '''
-    pred: a set of shapes predicted from NN, viewed as tensor (length, ...)
-    data: a set of shapes from ground truth, viewed as tensor (length, ...)
-    ret_map: return a mapping from ground truth(data) to pred, i.e. ret_map[n] -> k while data[n] -> pred[k]
-    '''
     if pred.shape[0] < data.shape[0]:
-        raise ValueError('more data than predicted')
+        raise ValueError('CHECKING ERROR: Generated shapes should be largely more than ground truth shapes')
+        
     pred, data = pred.view(pred.shape[0], -1), data.view(data.shape[0], -1)
-    dist_map = torch.zeros((data.shape[0], pred.shape[0]), dtype=pred.dtype, device=pred.device)
-    ret_map = torch.zeros(data.shape[0], dtype=torch.int64, device=pred.device)
+    distance = torch.zeros((data.shape[0], pred.shape[0]), dtype=pred.dtype, device=pred.device)
+    mapping = torch.zeros(data.shape[0], dtype=torch.int64, device=pred.device)
     inf = torch.tensor(float('inf'), dtype=torch.float32, device=pred.device)
     
+    # disance: distance[i][j] = mse distance between data[i] and pred[j]
     for i in range(data.shape[0]):
-        shape_i = data[i, :].view(1, -1)
-        dist_map[i] = torch.sum((shape_i - pred)**2, dim=1)
+        gt = data[i, :].view(1, -1)
+        distance[i] = torch.sum((gt - pred)**2, dim=1)
     
+    # mapping
     for i in range(data.shape[0]):
-        min_v, col_indices = dist_map.min(dim=1)
-        _, line = min_v.min(dim=0)
-        col = col_indices[line]
-        ret_map[line] = col
+        min_rows, col_indices = torch.min(distance, dim=1)
+        _, row = torch.min(min_rows, dim=0)
+        mapping[row] = col_indices[row]
         
-        dist_map[line, :] = inf
-        dist_map[:, col] = inf
-    
-    return ret_map
+        distance[row, :] = inf
+        distance[:, col_indices[row]] = inf
+        
+    return mapping
 
-def batch_match_shape(pred, data):
+# mapping generation via batch size
+def _batch_matching_shapes(pred, data):
     if pred.shape[0] != data.shape[0]:
-        raise ValueError('Unmatched batch size while generating maps')
+        raise ValueError("CHECKING ERROR: Batch size between generated shapes and ground truth are not the same")
     
-    ret_map = []
+    mapping = []
     for batch_pred, batch_data in zip(pred, data):
-        mapping = match_shape(batch_pred, batch_data)
-        ret_map.append(mapping)
-    
-    return torch.stack(ret_map, dim=0)
+        batch_mapping = _matching_shapes(batch_pred, batch_data)
+        mapping.append(batch_mapping)
+        
+    return torch.stack(mapping, dim=0)
 
+# Rewrite add operation for dictionary
 def dict_add(base, x):
     for key in base.keys():
         base[key] += x[key]
     return base
 
-def dict_mul(base, rate):
-    for key in base.keys():
-        base[key] *= rate
-    return base
+# ground truth linear combination without batch size, in other words, tensors(L x 176 x 2)
+def _linear_combination(cfg, size, meshes, random_seed):
+    selection = np.load(cfg)
+    random.seed(random_seed)
+    indices = random.sample(range(0, selection.shape[0]), size)
+    
+    gts = []
+    for idx in indices:
+        gt = [selection[idx, i] * meshes[i] for i in range(len(meshes))]
+        gts.append(torch.stack(gt, dim=0).sum(dim=0))
+    
+    return torch.stack(gts, dim=0)
 
-def print_metrics(epoch, met_dict):
-    metrics = [['Epoch'] + list(met_dict.keys())]
-    met_v = ["%.2f" % i for i in met_dict.values()]
-    index = [str(epoch)] + [str(i) for i in met_v]
-    metrics.append(index)
+# ground truth linear combination with batch size
+# cfg: permutation based on step size, saved as .npy
+# size: length of generated gts, the target size to extend ground truth
+# meshes: (batch, len, H, W)
+def _batch_lc(cfg, size, meshes, random_seed):
+    gts = []
+    for batch in meshes:
+        gts.append(_linear_combination(cfg, size, batch, random_seed))
     
-    return AsciiTable(metrics).table
-        
-def summary_metrics(train, valid):
-    metrics = ['Epoch']
-    for key in train[0].keys():
-        metrics = metrics + [f"T_{key}"] + [f"V_{key}"]
-    metrics = [metrics]
-    
-    for epoch in train.keys():
-        index = [str(epoch)]
-        for loss in train[epoch].keys():
-            index.append(train[epoch][loss])
-            if epoch in valid.keys() and loss in valid[epoch].keys():
-                index.append(valid[epoch][loss])
-            else:
-                index.append('---')
-        metrics.append(index)
-    
-    return AsciiTable(metrics).table
+    return torch.stack(gts, dim=0)

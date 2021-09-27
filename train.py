@@ -2,92 +2,58 @@ import os
 import argparse
 import tqdm
 import numpy as np
+import json
 
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-    
-import utils.util as uts
+
 from model import CQVAE
-from evals.evaluates import Evaluator
-from utils.loss import CQLoss
+from utils.loss import CQVAELoss
 from utils.datasets import SpineDataset
 from utils.logger import Logger
+from utils.summary import Summary
+import utils.util as uts
+
     
 class Trainer(object):
-    def __init__(self, args, dataset, model):
+    def __init__(self, args, dataset, model, device):
         self.args = args
         self.model = model
+        self.device = device
         self.dataloader = {
             'train': DataLoader(dataset['train'], batch_size=self.args.batch_size, shuffle=True),
             'valid': DataLoader(dataset['valid'], batch_size=self.args.batch_size, shuffle=True)
         }
         
-        # prerequistites and log initial
-        self.init_folders()
-        
-        # Eval
-        self.evaluator = Evaluator(logger=Logger(self.args.log_pth, self.args.task_name), debug=True, cfg="./cfgs/cfgs_table.npy")
-        
-        # loading weights and pretrained weights initialization
-        self.init_weights(load_weight=self.args.load_weights,
-                          pretrain_weight=self.args.pretrain_weights,
-                          freeze=True)
-        
         # DL prepared
-        self.device = torch.device(self.args.device if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
-        self.optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()),
-                                    lr=self.args.lr)
-        self.loss = CQLoss(alpha=model.alpha, beta=model.beta, gamma=model.gamma, device=self.device, eps=1e-20)
+        self.optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=self.args.lr)
+        self.loss = CQVAELoss(alpha=1.0, beta=1.0, gamma=1.0, device=self.device, eps=1e-20)
+        
+        # log and weights initialization
+        self._init_folders()
+        self._init_weights(load_ws=self.args.load_ws)
+        self.summary = Summary(logger=Logger(self.log_pth, self.args.task_name), debug=True, loss=self.loss)
         
         # random seed
         self.random_seed = 0
-        
+
     
-    def init_folders(self):
-        # Trick Modification for multiple processes
-        if self.args.log_pth == "./logs/":
-            self.args.log_pth = f"./logs_{self.args.task_name}/"
-        if self.args.sav_pth == "./saves/":
-            self.args.sav_pth = f"./saves_{self.args.task_name}/"
-            
-        os.makedirs(self.args.log_pth, exist_ok=True)
-        os.makedirs(self.args.sav_pth, exist_ok=True)
+    def _init_folders(self):
+        self.log_pth = f"./logs/logs_{self.args.task_name}/"
+        self.sav_pth = f"./saves/saves_{self.args.task_name}/"
+        if self.args.log:
+            os.makedirs(self.log_pth, exist_ok=True)
+        if self.args.sav:
+            os.makedirs(self.sav_pth, exist_ok=True)
     
-    def init_weights(self, load_weight, pretrain_weight, freeze=True):
-        if load_weight is not None:
-            if load_weight.endswith(".pth"):
-                self.model.load_state_dict(torch.load(load_weight))
-            else:
-                self.evaluator.log("warning", "Unknown loaded weight files: Error at train.py")
-                raise NotImplementedError("Unknown loaded weight files: Error at train.py")
-        '''
-           LAYERS      UPDATE_PRETRAIN        FREEZE
-        autoencoder          YES                YES
-        regress dec          YES                YES
-        segment dec          NO                 NO
-        shared pre           YES                NO     
-        '''
-        if pretrain_weight is not None:
-            model_dict = self.model.state_dict()
-            update_dict = {}
-            for pre_k, pre_v in torch.load(pretrain_weight).items():
-                if pre_k.startswith("autoencoder") or pre_k.startswith("decoder.regress"):
-                    update_dict[pre_k] = pre_v
-                elif pre_k.startswith("decoder.segment"):
-                    pass
-                else:
-                    update_dict[pre_k] = pre_v
-            model_dict.update(update_dict)
-            self.model.load_state_dict(model_dict)
-            
-            if freeze:
-                # requires_grad freeze
-                for p in self.model.autoencoder.parameters():
-                    p.requires_grad = False
-                for p in self.model.decoder.regress.parameters():
-                    p.requires_grad = False
+    def _init_weights(self, load_ws):
+        if load_ws is not None:
+            try:
+                self.model.load_state_dict(torch.load(load_ws))
+            except Exception as e:
+                self.summary.log("warning", repr(e))
         
         
     def train(self):
@@ -96,96 +62,134 @@ class Trainer(object):
         num_epoch = self.args.epoch
         for epoch in tqdm.tqdm(range(num_epoch)):
             self.run_single_step(epoch)
+        
+        # save model summary or log as json file
+        # f"{self.sav_pth}summary_train/valid_{self.args.task_name}.json"
+        modes = ['train', 'valid']
+        params = [self.summary.save_train, self.summary.save_valid]
+        for mode, param in zip(modes, params):
+            with open(f"{self.sav_pth}summary_{mode}_{self.args.task_name}.json", 'w') as f:
+                json.dump(param, fp=f, indent=4)
+                
+        # log for all losses throughout epoches
+        log_train, log_valid = self.summary.summary_loss()
+        loss_logs = [log_train, log_valid]
+        for mode, log in zip(modes, loss_logs):
+            with open(f"{self.sav_pth}loss_{mode}_{self.args.task_name}.txt", 'w') as f:
+                f.write(log)
     
-    def run_single_step(self, epoch):           
+    # set lc_bool to True if the ground truth set is not enough
+    # However, cfgs/gen_table.py should be modified to generate enough number of combinations
+    def run_single_step(self, epoch, lc_bool=True):           
         self.model.train()
         
-        # initial metrics for training and evaluating
-        batch_step_tau = len(self.dataloader['train']) // self.args.batch_step_tau
+        epoch_loss = 0
+        epoch_dict = None
+        epoch_size = len(self.dataloader['train'])
         
-        e_loss, e_size, e_dict = 0, 0, None
-        
-        for batch_i, (x, meshes, best_mesh) in tqdm.tqdm(enumerate(self.dataloader['train'])):
-            x = torch.unsqueeze(x, dim=1)
-            x, best_mesh = x.float().to(self.device), best_mesh.float().to(self.device)
-            meshes = [mesh.float().to(self.device) for mesh in meshes]
+        for batch_i, (x, meshes, best) in enumerate(self.dataloader['train']):
+            x = x.to(self.device)
+            best = best.to(self.device)
+            meshes = meshes.to(self.device)
             
+            # Update meshes: import linear combination to "extend" ground truth set
+            if lc_bool:
+                gts = uts._batch_lc(cfg="cfgs/cfgs_table.npy",
+                                    size=self.args.gt_sample,
+                                    meshes=meshes,
+                                    random_seed=self.random_seed)
+            else:
+                gts = meshes
+            
+            # Network
             self.optimizer.zero_grad()
             
-            # zs, decs, best are generated from model, called sampling ones
-            zs, decs, qy, logits, best = self.model(x)
-            
-            # pts, masks are linear combination of ground truth samples
-            # The number of generated ground truth samples is self.args.real_sample
-            # Please ensure self.args.real_sample <= self.num_sample
-            pts = uts.batch_linear_combination(cfg="cfgs/cfgs_table.npy",
-                                               target=self.args.real_sample, 
-                                               meshes=meshes,
-                                               random_seed=self.random_seed)
-            loss, loss_dict = self.loss.forward(zs, decs, qy, logits, best,
-                                                pts, best_mesh, self.model.vector_dims)
+            output, gs_logits = self.model(x)
+            loss, l_dict = self.loss.forward(output, gs_logits, gts, best, self.model.vector_dims,
+                                             kld=True, best_bool=True, autoe=True, regress=True, mark=False)
             loss.backward()
             
             self.optimizer.step()
             
-            # Update random seed, ensure dataset are selected periodically similiar
-            # Update tau to let it go smaller
-            if batch_i % batch_step_tau == 0:
-                model.tau = np.maximum(model.tau * np.exp(-1e-4 * batch_i),
-                                        self.args.min_tau)
-                self.evaluator.log("info", f"E{epoch}B{batch_i}is : {model.tau}")
-                
-                self.random_seed += 1
-                self.evaluator.update_seed(self.random_seed)
+            # Update tau:
+            #   accum_batch: The actual iteration
+            #   tau_step: the number following len(self.dataloader['train_A']) is important,
+            #             it represents the number of update operations
+            batch_unit = len(self.dataloader['train'].dataset) // self.args.batch_size
+            accum_batch = batch_unit * epoch + batch_i
+            tau_step = len(self.dataloader['train']) // 3
             
-            # evaluation
-            e_loss += loss.item() * x.shape[0]
-            e_size += x.shape[0]
-            if e_dict is None:
-                e_dict = loss_dict
-            else:
-                e_dict = uts.dict_add(e_dict, loss_dict)
+            if batch_i % tau_step == 0:
+                self.model.tau = np.maximum(self.model.tau * np.exp(-1e-4 * accum_batch), self.args.min_tau)
+                self.summary.log("info", f"E{epoch}B{batch_i}is : {self.model.tau}")
+            
+            # training process log
+            epoch_loss += loss.item()
+            epoch_dict = uts.dict_add(epoch_dict, l_dict) if epoch_dict is not None else l_dict
+            
+        self.summary.model_eval(epoch, "train", epoch_loss, epoch_dict, epoch_size)
         
-        self.evaluator.eval_model(epoch, "train", e_loss, e_dict, e_size)
-
         if epoch % self.args.eval_step == 0:
             self.model.eval()
-            
-            self.evaluator.eval_valid(epoch=epoch,
-                                      model=self.model,
-                                      data=self.dataloader['valid'],
-                                      real_sample=self.args.real_sample,
-                                      device=self.device)
-            self.evaluator.summary_valid(epoch)
+            self.valid(epoch)
         
         if epoch % self.args.save_step == 0:
             torch.save(self.model.state_dict(),
-                        f"{self.args.sav_pth}ckpt_{self.args.task_name}_{epoch}.pth")
+                        f"{self.sav_pth}ckpt_{epoch}_{self.args.task_name}.pth")
+            
+    def valid(self, epoch, lc_bool=True):
+        self.model.eval()
+        
+        epoch_loss = 0
+        epoch_dict = None
+        epoch_size = len(self.dataloader['valid'])
+        
+        for batch_i, (x, meshes, best) in enumerate(self.dataloader['valid']):
+            x = x.to(self.device)
+            best = best.to(self.device)
+            
+            # Update meshes: import linear combination to "extend" ground truth set
+            if lc_bool:
+                meshes = [mesh.to(self.device) for mesh in meshes]
+                gts = uts._batch_lc(cfg="cfgs/cfgs_table.npy",
+                                    size=self.args.gt_sample,
+                                    meshes=meshes,
+                                    random_seed=self.random_seed)
+            else:
+                gts = meshes
+            
+            output, gs_logits = self.model(x)
+            loss, l_dict = self.loss.forward(output, gs_logits, gts, best, self.model.vector_dims,
+                                             kld=True, best_bool=True, autoe=True, regress=True, mark=False)
+
+            # validation process log
+            epoch_loss += loss.item()
+            epoch_dict = uts.dict_add(epoch_dict, l_dict) if epoch_dict is not None else l_dict
+            
+        self.summary.model_eval(epoch, "valid", epoch_loss, epoch_dict, epoch_size)
 
 
 if __name__ == '__main__':
         
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--epoch", type=int, default=101)
-    
     parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--task_name", type=str, default="db")
+    parser.add_argument("--batch_size", type=int, default=10)
+    parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--epoch", type=int, default=151)
+    parser.add_argument("--num_sample", type=int, default=128)
+    parser.add_argument("--gt_sample", type=int, default=16)
+    parser.add_argument("--task_name", type=str, default="debug")
     
-    parser.add_argument("--num_sample", type=int, default=256)
-    parser.add_argument("--real_sample", type=int, default=32)
-    parser.add_argument("--batch_step_tau", type=int, default=5)
-    
-    parser.add_argument("--tau", type=int, default=5)
+    # tau: hyper-param related to gumbel softmax
+    parser.add_argument("--tau", type=int, default=3)
     parser.add_argument("--min_tau", type=float, default=0.5)
     
-    parser.add_argument("--eval_step", type=int, default=10)
-    parser.add_argument("--save_step", type=int, default=10)
-    
-    parser.add_argument("--log_pth", type=str, default="./logs/")
-    parser.add_argument("--sav_pth", type=str, default="./saves/")
-    parser.add_argument("--load_weights", type=str, default=None)
+    # log and weights related
+    parser.add_argument("--eval_step", type=int, default=5)
+    parser.add_argument("--save_step", type=int, default=5)
+    parser.add_argument("--log", type=bool, default=True)
+    parser.add_argument("--sav", type=bool, default=True)
+    parser.add_argument("--load_ws", type=str, default=None)
     
     parser.add_argument("--pretrain_weights", type=str, default=None)
     # parser.add_argument("--pretrain_weights", type=str, default="./pretrain_weights/pretrain_20.pth")
@@ -195,21 +199,18 @@ if __name__ == '__main__':
     dataset = {}
     for param in ['train', 'valid']:
         dataset[param] = SpineDataset(f"dataset/{param}.txt")
+    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
 
     model = CQVAE(in_channels=1,
                   out_channels=176*2,
                   latent_dims=64,
                   vector_dims=11,
                         
-                  alpha=1.,
-                  beta=1.,
-                  gamma=1.,
-                        
                   tau=args.tau,
-                  device=args.device,
+                  device=device,
                   num_sample=args.num_sample)
     
-    trainer = Trainer(args, dataset, model)
+    trainer = Trainer(args, dataset, model, device)
     trainer.train()
     
     

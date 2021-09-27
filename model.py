@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+# import torch.nn.functional as F
 
 from utils.ops import DiscreteEncoder, ShapeDist, BackLoopEnc, ShapeEst
-from utils.loss import CQLoss
 
 '''
 I -> Encoder -> P(Z) -gumbel-softmax sample-> z(one-hot) -> decoder -> regression points
@@ -34,10 +33,6 @@ class CQVAE(nn.Module):
                        latent_dims=64,
                        vector_dims=11,
                        
-                       alpha=1.,
-                       beta=1.,
-                       gamma=1.,
-                       
                        tau=1.,
                        device=None,
                        
@@ -47,7 +42,6 @@ class CQVAE(nn.Module):
         
         self.latent_dims = latent_dims
         self.vector_dims = vector_dims
-        self.alpha, self.beta, self.gamma = alpha, beta, gamma
         self.tau = tau
         self.device = device
         self.num_sample = num_sample
@@ -103,29 +97,22 @@ class CQVAE(nn.Module):
         return best_pt
     
     def forward(self, x):
-        '''
-            zs: list of z, sampled z from P(Z)
-            decs: list of tuple(pts, rz), regarding loss
-        '''
-        zs, pts, rzs = [], [], []
+        pts, zs, rzs = [], [], []
         logits, qy = self.encode(x)
                 
-        '''
-        SAMPLING METHOD:
-            [NO]  [1] x: drop with prob rate; gt: generate matched lr ground truth with the same amount
-            [YES] [2] x: generate fixed number of x; gt: generate half amount of gt
-        '''
+        # sampling: generate fixed number of x
         for i in range(self.num_sample):
             z = self.reparametrize(logits)
             pt, rz = self.shape_dist(z)
             zs, pts, rzs = zs + [z], pts + [pt], rzs + [rz]
         
-        zs, rzs = torch.stack(zs, dim=0).permute(1, 0, 2, 3), torch.stack(rzs, dim=0).permute(1, 0, 2, 3)
+        zs = torch.stack(zs, dim=0).permute(1, 0, 2, 3)
+        rzs = torch.stack(rzs, dim=0).permute(1, 0, 2, 3)
         pts = torch.stack(pts, dim=0).permute(1, 0, 2, 3)
-        decs = (pts, rzs)
+        
         best = self.shape_est(logits)
         
-        return zs, decs, qy, logits, best
+        return (zs, rzs, pts, best), (logits, qy)
 
 
 if __name__ == '__main__':
@@ -136,20 +123,12 @@ if __name__ == '__main__':
                   out_channels=176*2,
                   latent_dims=64,
                   vector_dims=11,
-                        
-                  alpha=1.,
-                  beta=1.,
-                  gamma=1.,
-                        
+
                   tau=5.,
                   device=device,
                   num_sample=32)
     
     model = model.to(device)
-    model_loss = CQLoss(alpha=model.alpha,
-                        beta=model.beta,
-                        gamma=model.gamma,
-                        device=device)
     
     if summary:
         from torchsummary import summary
@@ -157,8 +136,18 @@ if __name__ == '__main__':
     
     if debug:
         from torch.autograd import Variable
-        img = Variable(torch.rand(2, 1, 128, 128)).to(device)
-        zs, decs, qy, logits, best = model(img)
-        pts, zrs = decs
-        print(f"tensor shape: {pts.shape}, {best.shape}, {zrs.shape}, {zs.shape}")
+        img = Variable(torch.rand(3, 1, 128, 128)).to(device)
+        output, gs_logits = model(img)
+        (zs, rzs, pts, best), (logits, qy) = output, gs_logits
+        print(f"tensor shape: {pts.shape}, {rzs.shape}, {zs.shape}, {best.shape}")
+        print(f"tensor shape: {logits.shape}, {qy.shape}")
+        
+        from utils.loss import CQVAELoss
+        best_gt = Variable(torch.rand(3, 176, 2)).to(device)
+        gts = Variable(torch.rand(3, 16, 176, 2)).to(device)
+        model_loss = CQVAELoss(alpha=1.0, beta=1.0, gamma=1.0, device=device)
+        loss, loss_dict = model_loss.forward(output, gs_logits, gts, best_gt, 11, True, True, True, True, True)
+        
+        print(f"loss is {loss}")
+        print(f"detail is {loss_dict}")
         

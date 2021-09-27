@@ -1,1 +1,1 @@
-# probalistic-unet
+# CQ-VAE

@@ -1,69 +1,67 @@
+# import numpy as np
 import scipy.io as sio
-import utils.util as uts
+import torch
 
-class SpineDataset:
-    def __init__(self, pth):
-        with open(pth, "r") as file:
-            self.filenames = file.readlines()
+class SpineDataset(torch.utils.data.Dataset):
+    def __init__(self, path):
+        self.path = path
+        with open(path, "r") as f:
+            self.filelist = f.readlines()
     
     def __len__(self):
-        return len(self.filenames)
+        return len(self.filelist)
     
     def __getitem__(self, index):
-        cur_pth = self.filenames[index % len(self.filenames)].rstrip()
-        cur_mat = sio.loadmat(cur_pth)
+        cur_path = self.filelist[index % len(self.filelist)].rstrip()
+        data = sio.loadmat(cur_path)
         
-        img = cur_mat['img']
-        disks = cur_mat['disk']
-        best = cur_mat['best']
-        # best_mask = uts.poly2mask(img.shape[0], img.shape[1], best + 64)
+        # extract image and best, reshape as (C, H, W)
+        img, meshes, best = data['img'], data['disk'], data['best']
+        img = img.reshape(1, img.shape[0], img.shape[1])
         
-        return img, disks, best
-    
+        # normalization and torch
+        img = (img - img.min())/(img.max() - img.min())
+        img = torch.tensor(img, dtype=torch.float32)
+        best = torch.tensor(best, dtype=torch.float32)
+        meshes = torch.tensor(meshes, dtype=torch.float32)
+        
+        return img, meshes, best
+
 
 if __name__ == '__main__':
+    debug = True
     import matplotlib.pyplot as plt
-    ds = SpineDataset(r'../dataset/train.txt')
-    # max_size = len(ds)
-    # for i, (img, pts, best, best_mask, cur_pth) in enumerate(ds):
-    #     print(i)
-    #     if i >= max_size + 1:
-    #         break
-        
-    #     fig, ax = plt.subplots()
-    #     title = cur_pth.split('\\')[-1]
-    #     fig.suptitle(f"{title}")
-    #     ax.imshow(img, cmap='gray')
-        
-    #     for pt in pts:
-    #         ax.plot(pt[:, 0] + 64, pt[:, 1] + 64, 'g-')
-    
-    for i, (img, pts, best) in enumerate(ds):
-        import numpy as np
-        for pt in pts:                
-                fig1, ax1 = plt.subplots()
-                ax1.imshow(img, cmap='gray')
-                ax1.plot(pt[:, 0]+64, pt[:, 1]+64, 'r-')
-                ax1.imshow(img, cmap='gray', alpha=0)
-        if i>=3:
-                
-            break
-    
-    # for i, (img, pts, best) in enumerate(ds):
-    #     fig, ax = plt.subplots()
-    #     ax.imshow(img, cmap='gray')
-    #     ax.plot(best[:, 0] + 64, best[:, 1] + 64, 'g-')
-    #     # ax.scatter(best[[0,29,88,117], 0] + 64, best[[0,29,88,117], 1] + 64, marker = 'o', color = 'b')
-        
-    #     # ax.imshow(best_mask, cmap='gray', alpha=0.5)
-        
-    #     for pt in pts:
-    #         fig1, ax1 = plt.subplots()
-    #         ax1.imshow(img, cmap='gray')
-    #         ax1.plot(pt[:, 0] + 64, pt[:, 1] + 64, 'g-')
-    #         ax1.scatter(pt[[0,29,88,117], 0] + 64, pt[[0,29,88,117], 1] + 64, marker = 'o', color = 'b')
+    dataset = SpineDataset(r'../dataset/train.txt')
+    print(f"len function: Dataset Length is {len(dataset)}")
+
+    if not debug:
+        for i, (img, meshes, best) in enumerate(dataset):
+            print(f"img {i}: Image shape is {img.shape}")
+            print(f"meshes {i}: Best shape is {meshes.shape}")
+            print(f"best {i}: Best shape is {best.shape}")
             
-    #         mask = uts.poly2mask(img.shape[0], img.shape[1], pt + 64)
-    #         ax1.imshow(mask, cmap='gray', alpha=0.5)
+            fig, ax = plt.subplots()
+            ax.imshow(img[0, :, :], cmap='gray')
+            ax.plot(best[:, 0] + 64, best[:, 1] + 64, 'r-')
         
-    #     break
+            if i >= 2:
+                print("Only plot limited iterations")
+                break
+    
+    if debug:
+        dataset = {}
+        for param in ['train', 'valid', 'test']:
+            dataset[param] = SpineDataset(f"../dataset/{param}.txt")
+        from torch.utils.data import DataLoader
+        dataloader = {
+            'train': DataLoader(dataset['train'], batch_size=3, shuffle=True),
+            'valid': DataLoader(dataset['valid'], batch_size=3, shuffle=True),
+            'test': DataLoader(dataset['test'], batch_size=3, shuffle=False)
+        }
+        print(f"len function: Dataloader Length is {len(dataloader['train'])}")
+        
+        for batch_i, (data_A, data_B, data_C) in enumerate(zip(dataloader['train'], dataloader['valid'], dataloader['test'])):
+            print(len(data_A))
+            print(len(data_B))
+            print(len(data_C))
+            break
