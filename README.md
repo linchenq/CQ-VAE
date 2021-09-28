@@ -27,6 +27,13 @@ the results show that our CQ-VAE can learn lumbar disk shape variation and uncer
 
 ## Setup
 
+```
+conda create -n pytorch1.8_py3.8_cqvae python=3.8
+source activate pytorch1.8_py3.8_cqvae
+conda install pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 cudatoolkit=10.2 -c pytorch
+pip install -r requirements.txt
+```
+
 ### Toy dataset preprocessing
 
 ### Training
