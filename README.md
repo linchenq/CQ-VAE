@@ -4,7 +4,7 @@ The repository contains the source code and model from our [ICMLA 2020 paper](ht
 
 ## Updates
 
-**[09/2021]** Update the newest version of our model CQ-VAE while set the repository to public. The [toy dataset](CQ-VAE/dataset) will be released soon.  
+**[09/2021]** Update the newest version of our model CQ-VAE while set the repository to public. The [toy dataset](https://github.com/linchenq/CQ-VAE/tree/master/dataset) will be released soon.  
 **[07/2020]** PCA is applied on the lumbar dataset to build a statistical shape model (SSM), which generates modes of shape variations covering about 80% of the total variations.  
 
 ## Abstract
@@ -20,3 +20,43 @@ the results show that our CQ-VAE can learn lumbar disk shape variation and uncer
 
 ## Framework
 ![image](https://github.com/linchenq/CQ-VAE/blob/master/images/framework.jpg)
+
+## Hyper-parameter recommendation
+![image](https://github.com/linchenq/CQ-VAE/blob/master/images/eval_ratio.jpg)
+
+## Setup
+
+### Toy dataset preprocessing
+
+### Training
+
+```
+python train.py [-h] [--device DEVICE] [--batch_size BATCH_SIZE] [--lr LR] [--epoch EPOCH] [--num_sample NUM_SAMPLE]
+                [--gt_sample GT_SAMPLE] [--task_name TASK_NAME] [--tau TAU] [--min_tau MIN_TAU]
+                [--eval_step EVAL_STEP] [--save_step SAVE_STEP] [--log LOG] [--sav SAV] [--load_ws LOAD_WS]
+                [--pretrain_weights PRETRAIN_WEIGHTS]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --device DEVICE
+  --batch_size BATCH_SIZE
+  --lr LR
+  --epoch EPOCH
+  --num_sample NUM_SAMPLE
+  --gt_sample GT_SAMPLE
+  --task_name TASK_NAME
+  --tau TAU
+  --min_tau MIN_TAU
+  --eval_step EVAL_STEP
+  --save_step SAVE_STEP
+  --log LOG
+  --sav SAV
+  --load_ws LOAD_WS
+  --pretrain_weights PRETRAIN_WEIGHTS
+```
+
+### Inference
+
+```
+python inference.py
+```
