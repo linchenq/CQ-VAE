@@ -4,8 +4,8 @@ The repository contains the source code and model from our [ICMLA 2020 paper](ht
 
 ## Updates
 
-[09/2021] Update the newest version of our model CQ-VAE while set the repository to public. The [toy dataset](CQ-VAE/dataset) will be released soon.
-[07/2020] PCA is applied on the lumbar dataset to build a statistical shape model (SSM), which generates modes of shape variations covering about 80% of the total variations.
+**[09/2021]** Update the newest version of our model CQ-VAE while set the repository to public. The [toy dataset](CQ-VAE/dataset) will be released soon.  
+**[07/2020]** PCA is applied on the lumbar dataset to build a statistical shape model (SSM), which generates modes of shape variations covering about 80% of the total variations.  
 
 ## Abstract
 Ambiguity is inevitable in medical images, which often results in different image interpretations (e.g. object boundaries or segmentation maps) from different human
@@ -19,3 +19,4 @@ probabilistic components to generate possible outputs, our model has a determini
 the results show that our CQ-VAE can learn lumbar disk shape variation and uncertainty.
 
 ## Framework
+![image](https://github.com/linchenq/CQ-VAE/blob/master/images/framework.jpg)
