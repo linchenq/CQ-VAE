@@ -22,6 +22,7 @@ the results show that our CQ-VAE can learn lumbar disk shape variation and uncer
 ![image](https://github.com/linchenq/CQ-VAE/blob/master/images/framework.jpg)
 
 ## Hyper-parameter recommendation
+![image](https://github.com/linchenq/CQ-VAE/blob/master/images/training_ratio.jpg)
 ![image](https://github.com/linchenq/CQ-VAE/blob/master/images/eval_ratio.jpg)
 
 ## Setup
